@@ -78,7 +78,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'wstcp --bind-addr 127.0.0.1:55688 raw.githubusercontent.com:443',
+      command: 'wstcp --bind-addr 127.0.0.1:55688 myprotein.ro:443',
       reuseExistingServer: true,
     },
   ]

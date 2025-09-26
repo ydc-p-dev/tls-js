@@ -34,8 +34,8 @@ const rules = [
 const rendererRules = [];
 
 const entry = {
-  'full-integration': path.join(__dirname, 'test', 'e2e', 'full-integration.spec.ts'),
-  'simple-verify': path.join(__dirname, 'test', 'e2e', 'simple-verify.spec.ts'),
+  'integration': path.join(__dirname, 'test', 'new', 'integration.spec.ts'),
+  'verify': path.join(__dirname, 'test', 'new', 'verify.spec.ts'),
   // add more entries as needed
 };
 
