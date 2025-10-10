@@ -22,49 +22,41 @@ function withTimeout<T>(p: Promise<T>, ms: number, label='timeout'): Promise<T> 
         p.then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
     });
 }
-console.log('sssssssssssss');
 (async function () {
     try {
         await init({ loggingLevel: 'Debug' });
         // @ts-ignore
         console.log('test start');
         console.time('prove');
+        let serverDns=  'modaoperandi.com';
+        let tlsServer = 'http://127.0.0.1:7047';
+        const websocketProxyUrl      = 'ws://127.0.0.1:55688';
+
         const prover = (await new Prover({
-            serverDns: 'www.myprotein.ro',
+            serverDns: serverDns,
             maxRecvData: 16384,
             maxSentData: 4096,
             network: "Bandwidth",
         })) as _Prover;
-        console.log('prover',prover);
-        const notary = NotaryServer.from('http://127.0.0.1:7047');
-        console.log('333',notary);
+        const notary = NotaryServer.from(tlsServer);
 
         await prover.setup(await notary.sessionUrl());
-        console.log('r4');
-        // const websocketProxyUrl = 'wss://notary.pse.dev/proxy?token=ethglobal.com';
-        const websocketProxyUrl      = 'ws://127.0.0.1:55688';
 
-        console.log('1');
         await prover.sendRequest(websocketProxyUrl, {
-            url: 'https://www.myprotein.ro/api/operation/ApplyPromocode/',
+            url: 'https://api.modaoperandi.com/public/v3.5/cart/256762709?target=shopping_bag&country_code=US',
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
             },
             body: {
-                operationName: 'ApplyPromocode',
-                variables: {
-                    code: 'dd',
-                    currency: 'RON',
-                    shippingDestination: 'RO',
-                    hasSubscriptions: false,
-                    enableAdvancedBYOB: false,
+                "action_type": "promotion",
+                "attributes": {
+                    "promotion_code": "10TEXT",
+                    "country_code": "US"
                 },
-            },
-            // headers: {
-            //     // 'content-type': 'text/html',
-            //     secret: 'test_secret',
-            // },
+                "id": "256762709",
+                "type": "carts"
+            }
         });
         console.log('2');
 
@@ -76,7 +68,7 @@ console.log('sssssssssssss');
             body: recvBody,
         } = parseHttpMessage(Buffer.from(recv), 'response');
         console.log('3');
-        console.log('body',recvBody[0]);
+        console.log('body',recvBody);
 
 
         const body = JSON.parse(recvBody[0].toString());
@@ -119,7 +111,7 @@ console.log('sssssssssssss');
             secretsHex: notarizationOutput.secrets,
             reveal: reveal,
             notaryUrl: notary.url,
-            websocketProxyUrl: 'wss://notary.pse.dev/proxy',
+            websocketProxyUrl: websocketProxyUrl,
         })) as _Presentation;
         console.log('presentation:', await presentation.serialize());
         console.timeEnd('prove');
