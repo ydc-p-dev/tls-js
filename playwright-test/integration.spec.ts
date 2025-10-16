@@ -1,29 +1,51 @@
 import { test, expect } from '@playwright/test';
 
-console.log('ssss');
+const targetDomain = process.env.TARGET_DOMAIN;
+const versionEnv = process.env.VERSION ?? '0.1.0-alpha.12';
+
+console.log('Server Side');
 test('integration', async ({ page }) => {
-    // log browser console messages
-    // page.on('console', (msg) => {
-    //     console.log(`[BROWSER ${msg.type().toUpperCase()}] ${msg.text()}`);
-    // });
 
-    await page.goto('/integration');
+  console.log('🎯 Testing domain:', targetDomain);
 
-    await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 60000 });
 
-    const json = await page.getByTestId('integration').innerText();
-    const { sent, recv, server_name, version, meta } = JSON.parse(json);
-    // console.log('sent',sent);
-    // return;
+  console.log('\n🎯 Running notarization for:', targetDomain);
 
-    expect(version).toBe('0.1.0-alpha.12');
-    expect(new URL(meta.notaryUrl!).protocol === 'http:');
-    // expect(server_name).toBe('myprotein.ro');
+  await page.addInitScript(domain => {
+    window.__TARGET_DOMAIN__ = domain;
+  }, targetDomain);
 
-    // expect(sent).toContain('host: myprotein.ro');
-    // expect(sent).not.toContain('secret: test_secret');
-    // expect(recv).toContain('"id": 1234567890');
-    // expect(recv).toContain('"city": "Anytown"');
-    // expect(recv).toContain('"postalCode": "12345"');
+  // Логування для дебагу
+  // page.on('console', msg => {
+  //   const text = msg.text();
+  //   // Фільтруємо шум
+  //   if (!text.includes('DevTools') && !text.includes('Download')) {
+  //     console.log('  [Browser]:', text);
+  //   }
+  // });
+  //
+  // page.on('pageerror', error => {
+  //   console.error('  [Browser Error]:', error.message);
+  // });
+
+  const base = process.env.BASE_URL || 'http://localhost:3001'; // або порт твого сервера
+  const fullUrl = `${base}/integration.html?domain=${encodeURIComponent(targetDomain)}`;
+
+  console.log('  Opening:', fullUrl);
+
+  await page.goto(fullUrl);
+
+  console.log('  Waiting for result...');
+  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 60000 });
+
+  const json = await page.getByTestId('integration').innerText();
+  const { sent, recv, server_name, version, meta } = JSON.parse(json);
+
+  console.log('  Received SERVER:', recv);
+  console.log('  Sent SERVER:', sent);
+  expect(version).toBe(versionEnv);
+  expect(new URL(meta.notaryUrl!).protocol === 'http:');
+  expect(server_name).toContain(targetDomain);
+  expect(sent).toContain(targetDomain);
 
 });

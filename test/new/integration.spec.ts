@@ -1,190 +1,436 @@
+// test/new/integration.spec.ts
 import {
-    Prover as _Prover,
-    NotaryServer,
-    Presentation as _Presentation,
-    Commit,
-    mapStringToRange,
-    subtractRanges,
-    Transcript,
-    Reveal,
+  Commit,
+  mapStringToRange,
+  NotaryServer,
+  Presentation as _Presentation,
+  Prover as _Prover,
+  Reveal,
+  subtractRanges,
+  Transcript
 } from '../../src/lib';
 import * as Comlink from 'comlink';
 import { HTTPParser } from 'http-parser-js';
+import configData from '../../site-config/config.json';
+const config = configData;
+
 
 const { init, Prover, Presentation }: any = Comlink.wrap(
-    // @ts-ignore
-    new Worker(new URL('../worker.ts', import.meta.url)),
+  // @ts-ignore
+  new Worker(new URL('../worker.ts', import.meta.url)),
 );
 
-function withTimeout<T>(p: Promise<T>, ms: number, label='timeout'): Promise<T> {
-    return new Promise((res, rej) => {
-        const t = setTimeout(() => rej(new Error(label)), ms);
-        p.then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
-    });
+interface RuntimeConfig {
+  domain: string;
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  body: any;
+  headers: Record<string, string>;
+  cookies: string;
+  notaryUrl: string;
+  proxyUrl: string;
+  maxSentData: number;
+  maxRecvData: number;
+  outputFile?: string;
+  description?: string;
 }
+
+function extractDomainFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch (err) {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+}
+
+function getTargetDomain(): string {
+  // Метод 1: З window (встановлюється wrapper)
+  if (window.__TARGET_DOMAIN__) {
+    console.log('✅ Got TARGET_DOMAIN from window:', window.__TARGET_DOMAIN__);
+    return window.__TARGET_DOMAIN__;
+  }
+
+  // Метод 2: З URL параметрів
+  const params = new URLSearchParams(window.location.search);
+  const urlDomain = params.get('domain');
+  if (urlDomain) {
+    console.log('✅ Got TARGET_DOMAIN from URL:', urlDomain);
+    return urlDomain;
+  }
+
+  throw new Error(
+    '❌ TARGET_DOMAIN not provided.\n' +
+    'window.__TARGET_DOMAIN__ = ' + (window.__TARGET_DOMAIN__ || 'undefined')
+  );
+}
+
+async function getSiteConfig(): Promise<RuntimeConfig> {
+  let requestData = null;
+  try {
+    const response = await fetch('http://127.0.0.1:3002/request-data');
+    requestData = await response.json();
+    console.log(requestData);
+  } catch (err) {}
+
+  const targetDomain = getTargetDomain();
+  console.log('TARGET_DOMAIN:', targetDomain || 'not provided');
+
+  const siteConfig = requestData ?? config.sites[targetDomain];
+
+  if (!siteConfig) {
+    const availableDomains = Object.keys(config.sites).join(', ');
+    throw new Error(
+      `❌ Configuration not found for domain: ${targetDomain}\n` +
+        `Available domains: ${availableDomains}`,
+    );
+  }
+
+  const domain = extractDomainFromUrl(siteConfig.applyCouponUrl);
+  const defaults = {
+    notaryUrl: 'http://127.0.0.1:7047',
+    proxyUrl: 'ws://127.0.0.1:55688',
+    maxSentData: 4096,
+    maxRecvData: 16384,
+  };
+
+  if(siteConfig === requestData) {
+    console.log('requestData SELECTED')
+  }
+
+  let method = 'POST';
+  const allowedMethods = ['GET', 'POST', 'PUT', 'DELETE'];
+  if (siteConfig?.method && allowedMethods.includes(siteConfig.method)) {
+    method = siteConfig.method;
+  }
+
+  return {
+    domain: domain,
+    url: siteConfig.applyCouponUrl,
+    method,
+    body: requestData ? JSON.parse(requestData.payload) : siteConfig.payload,
+    headers: siteConfig.headers || {
+      'content-type': 'application/json',
+    },
+    cookies: siteConfig?.cookies || '',
+    notaryUrl: defaults.notaryUrl!,
+    proxyUrl: defaults.proxyUrl!,
+    maxSentData: siteConfig.maxSentData || defaults.maxSentData!,
+    maxRecvData: siteConfig.maxRecvData || defaults.maxRecvData!,
+    description: siteConfig.description,
+  };
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T> {
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error(label)), ms);
+    p.then(
+      v => { clearTimeout(t); res(v); },
+      e => { clearTimeout(t); rej(e); }
+    );
+  });
+}
+
 (async function () {
-    try {
-        await init({ loggingLevel: 'Debug' });
-        // @ts-ignore
-        console.log('test start');
-        console.time('prove');
-        let serverDns=  'modaoperandi.com';
-        let tlsServer = 'http://127.0.0.1:7047';
-        const websocketProxyUrl      = 'ws://127.0.0.1:55688';
+  let siteConfig: RuntimeConfig;
 
-        const prover = (await new Prover({
-            serverDns: serverDns,
-            maxRecvData: 16384,
-            maxSentData: 4096,
-            network: "Bandwidth",
-        })) as _Prover;
-        const notary = NotaryServer.from(tlsServer);
-
-        await prover.setup(await notary.sessionUrl());
-
-        await prover.sendRequest(websocketProxyUrl, {
-            url: 'https://api.modaoperandi.com/public/v3.5/cart/256762709?target=shopping_bag&country_code=US',
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-            },
-            body: {
-                "action_type": "promotion",
-                "attributes": {
-                    "promotion_code": "10TEXT",
-                    "country_code": "US"
-                },
-                "id": "256762709",
-                "type": "carts"
-            }
-        });
-        console.log('2');
-
-        const transcript = await prover.transcript();
-        const { sent, recv } = transcript;
-        const {
-            info: recvInfo,
-            headers: recvHeaders,
-            body: recvBody,
-        } = parseHttpMessage(Buffer.from(recv), 'response');
-        console.log('3');
-        console.log('body',recvBody);
-
-
-        const body = JSON.parse(recvBody[0].toString());
-
-        const commit: Commit = {
-            sent: subtractRanges(
-                { start: 0, end: sent.length },
-                mapStringToRange(
-                    ['secret: test_secret'],
-                    Buffer.from(sent).toString('utf-8'),
-                ),
-            ),
-            recv: [
-                ...mapStringToRange(
-                    [
-                        recvInfo,
-                        `${recvHeaders[4]}: ${recvHeaders[5]}\r\n`,
-                        `${recvHeaders[6]}: ${recvHeaders[7]}\r\n`,
-                        `${recvHeaders[8]}: ${recvHeaders[9]}\r\n`,
-                        `${recvHeaders[10]}: ${recvHeaders[11]}\r\n`,
-                        `${recvHeaders[12]}: ${recvHeaders[13]}`,
-                        `${recvHeaders[14]}: ${recvHeaders[15]}`,
-                        `${recvHeaders[16]}: ${recvHeaders[17]}`,
-                        `${recvHeaders[18]}: ${recvHeaders[19]}`,
-                    ],
-                    Buffer.from(recv).toString('utf-8'),
-                ),
-            ],
-        };
-        console.log('4');
-
-        console.log(commit);
-        const notarizationOutput = await prover.notarize(commit);
-        const reveal: Reveal = {
-            ...commit,
-            server_identity: false,
-        };
-        const presentation = (await new Presentation({
-            attestationHex: notarizationOutput.attestation,
-            secretsHex: notarizationOutput.secrets,
-            reveal: reveal,
-            notaryUrl: notary.url,
-            websocketProxyUrl: websocketProxyUrl,
-        })) as _Presentation;
-        console.log('presentation:', await presentation.serialize());
-        console.timeEnd('prove');
-        const json = await presentation.json();
-
-        const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "proof.json";
-        a.click();
-        console.time('verify');
-        const { transcript: partialTranscript, server_name } =
-            await presentation.verify();
-        const verifyingKey = await presentation.verifyingKey();
-        console.timeEnd('verify');
-
-        console.log('verifyingKey', verifyingKey);
-        const t = new Transcript({
-            sent: partialTranscript.sent,
-            recv: partialTranscript.recv,
-        });
-        const sentStr = t.sent();
-        const recvStr = t.recv();
-
-        console.log("Sent:", sentStr);
-        console.log("Received:", recvStr);
-
-
-        // @ts-ignore
-        document.getElementById('integration').textContent = JSON.stringify({
-            sent: sentStr,
-            recv: recvStr,
-            version: json.version,
-            meta: json.meta,
-            server_name
-        }, null, 2);
-    } catch (err) {
-        console.log('caught error from wasm');
-        console.error(err);
-        // @ts-ignore
-        document.getElementById('integration').textContent = err.message;
+  try {
+    siteConfig = await getSiteConfig();
+    console.log('SITE CONFIG', siteConfig)
+  } catch (err: any) {
+    console.error(err.message);
+    // @ts-ignore
+    const resultElement = document.getElementById('integration');
+    if (resultElement) {
+      resultElement.textContent = err.message;
     }
+    throw err;
+  }
+
+  // Виводимо інформацію про конфігурацію
+  console.log('\n🚀 TLSNotary Integration Test');
+  console.log('═══════════════════════════════════════');
+  console.log('🎯 Domain:     ', siteConfig.domain);
+  console.log('🌐 URL:        ', siteConfig.url);
+  console.log('📡 Method:     ', siteConfig.method);
+  console.log('🔐 Notary:     ', siteConfig.notaryUrl);
+  console.log('🌉 Proxy:      ', siteConfig.proxyUrl);
+  console.log('📤 Max Sent:   ', siteConfig.maxSentData, 'bytes');
+  console.log('📥 Max Recv:   ', siteConfig.maxRecvData, 'bytes');
+
+  if (siteConfig.outputFile) {
+    console.log('💾 Output:     ', siteConfig.outputFile);
+  }
+  console.log('═══════════════════════════════════════');
+  console.log('📦 Payload:');
+  console.log(JSON.stringify(siteConfig.body, null, 2));
+  console.log('═══════════════════════════════════════\n');
+
+  try {
+    // Ініціалізація
+    console.log('⏳ Initializing WASM...');
+    await init({ loggingLevel: 'Debug' });
+    console.log('✅ WASM initialized');
+
+    console.time('⏱️  Total time');
+    console.time('🔧 Setup time');
+
+    // Створення Prover
+    console.log('⏳ Creating Prover...');
+    const prover = (await new Prover({
+      serverDns: siteConfig.domain,
+      maxRecvData: siteConfig.maxRecvData,
+      maxSentData: siteConfig.maxSentData,
+      network: "Bandwidth",
+    })) as _Prover;
+    console.log('✅ Prover created');
+
+    // Підключення до Notary
+    console.log('⏳ Connecting to Notary Server...');
+    const notary = NotaryServer.from(siteConfig.notaryUrl);
+    const sessionUrl = await notary.sessionUrl();
+    await prover.setup(sessionUrl);
+    console.log('✅ Connected to Notary');
+
+    console.timeEnd('🔧 Setup time');
+
+    // Відправка запиту
+    console.log('⏳ Sending request...');
+    console.log('   URL:', siteConfig.url);
+    console.log('   Method:', siteConfig.method);
+    console.time('🌐 Request time');
+
+    const requestOptions: any = {
+      url: siteConfig.url,
+      method: siteConfig.method,
+      headers: siteConfig.headers,
+    };
+
+    // Додаємо body тільки якщо не GET
+    if (siteConfig.method !== 'GET' && siteConfig.body) {
+      requestOptions.body = siteConfig.body;
+      console.log('   Body:', JSON.stringify(siteConfig.body).substring(0, 100) + '...');
+    }
+
+    await prover.sendRequest(siteConfig.proxyUrl, requestOptions);
+    console.log('✅ Request sent');
+    console.timeEnd('🌐 Request time');
+
+    // Отримання transcript
+    console.log('⏳ Getting transcript...');
+    const transcript = await prover.transcript();
+    const { sent, recv } = transcript;
+    console.log('✅ Transcript received');
+    console.log('   📤 Sent:', sent.length, 'bytes');
+    console.log('   📥 Received:', recv.length, 'bytes');
+
+    // Парсинг HTTP відповіді
+    console.log('⏳ Parsing response...');
+    const {
+      info: recvInfo,
+      headers: recvHeaders,
+      body: recvBody,
+    } = parseHttpMessage(Buffer.from(recv), 'response');
+    console.log('✅ Response parsed');
+    console.log('   Status:', recvInfo.trim());
+    let parsedBody = null;
+    // Спроба парсити JSON body
+    if (recvBody && recvBody[0]) {
+      try {
+        parsedBody = JSON.parse(recvBody[0]?.toString());
+        console.log('✅ JSON body parsed');
+        console.log('   Response preview:', JSON.stringify(parsedBody).substring(0, 200) + '...');
+      } catch (err) {
+        console.log('ℹ️  Response is not JSON');
+        parsedBody = recvBody[0]?.toString();
+        console.log('   Response preview:', parsedBody.substring(0, 200) + '...');
+      }
+    }
+
+
+    // Створення commitment
+    console.log('⏳ Creating commitment...');
+    const commit: Commit = {
+      sent: subtractRanges(
+        { start: 0, end: sent.length },
+        mapStringToRange(
+          [], // Можна додати речі для приховування
+          Buffer.from(sent).toString('utf-8'),
+        ),
+      ),
+      recv: [
+        ...mapStringToRange(
+          [
+            recvInfo,
+            // Показуємо перші заголовки
+            ...recvHeaders.slice(0, Math.min(20, recvHeaders.length))
+              .reduce((acc, header, i, arr) => {
+                if (i % 2 === 0 && arr[i + 1]) {
+                  acc.push(`${header}: ${arr[i + 1]}\r\n`);
+                }
+                return acc;
+              }, [] as string[]),
+          ],
+          Buffer.from(recv).toString('utf-8'),
+        ),
+      ],
+    };
+    console.log('✅ Commitment created');
+
+    // Нотаризація
+    console.log('⏳ Notarizing...');
+    console.time('🔐 Notarization time');
+    const notarizationOutput = await prover.notarize(commit);
+    console.timeEnd('🔐 Notarization time');
+    console.log('✅ Notarization complete');
+
+    // Створення Presentation
+    console.log('⏳ Creating presentation...');
+    const reveal: Reveal = {
+      ...commit,
+      server_identity: false,
+    };
+
+    const presentation = (await new Presentation({
+      attestationHex: notarizationOutput.attestation,
+      secretsHex: notarizationOutput.secrets,
+      reveal: reveal,
+      notaryUrl: notary.url,
+      websocketProxyUrl: siteConfig.proxyUrl,
+    })) as _Presentation;
+    console.log('✅ Presentation created');
+
+    // Серіалізація
+    const serialized = await presentation.serialize();
+    console.log('📦 Serialized size:', serialized.length, 'bytes');
+
+    // Експорт JSON
+    const json = await presentation.json();
+
+    // Генеруємо ім'я файлу
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const domainKey = process.env.TARGET_DOMAIN || siteConfig.domain;
+    const fileName = siteConfig.outputFile ||
+      `proof_${domainKey}_${timestamp}.json`;
+
+    // Збереження в файл
+    const blob = new Blob([JSON.stringify(json, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    console.log('💾 Proof saved to:', fileName);
+
+    // Верифікація
+    console.log('⏳ Verifying...');
+    console.time('✅ Verification time');
+    const { transcript: partialTranscript, server_name } =
+      await presentation.verify();
+    const verifyingKey = await presentation.verifyingKey();
+    console.timeEnd('✅ Verification time');
+    console.log('✅ Verification successful');
+    console.log('   Server:', server_name);
+    console.log('   Verifying Key:', verifyingKey);
+
+    // Відображення результату
+    const t = new Transcript({
+      sent: partialTranscript.sent,
+      recv: partialTranscript.recv,
+    });
+    const sentStr = t.sent();
+    const recvStr = t.recv();
+
+    console.log('\n📊 Results:');
+    console.log('═══════════════════════════════════════');
+    console.log('📤 Sent:\n', sentStr.substring(0, 500), sentStr.length > 500 ? '...' : '');
+    console.log('───────────────────────────────────────');
+    console.log('📥 Received:\n', recvStr.substring(0, 500), recvStr.length > 500 ? '...' : '');
+    console.log('═══════════════════════════════════════\n');
+
+    console.timeEnd('⏱️  Total time');
+
+    // Відобразити на сторінці
+    // @ts-ignore
+    const resultElement = document.getElementById('integration');
+    if (resultElement) {
+      resultElement.textContent = JSON.stringify({
+        success: true,
+        domain: siteConfig.domain,
+        url: siteConfig.url,
+        sent: sentStr,
+        recv: recvStr,
+        parsedResponse: parsedBody ?? null,
+        version: json.version,
+        meta: json.meta,
+        server_name,
+        verifyingKey,
+        stats: {
+          sentBytes: sent.length,
+          recvBytes: recv.length,
+          proofSize: serialized.length,
+        },
+        outputFile: fileName,
+      }, null, 2);
+    }
+
+    console.log('✅ All done!');
+
+  } catch (err: any) {
+    console.error('\n❌ Error occurred:');
+    console.error('═══════════════════════════════════════');
+    console.error('Message:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('═══════════════════════════════════════\n');
+
+    // @ts-ignore
+    const resultElement = document.getElementById('integration');
+    if (resultElement) {
+      resultElement.textContent = JSON.stringify({
+        success: false,
+        domain: siteConfig?.domain,
+        url: siteConfig?.url,
+        error: err.message,
+        stack: err.stack,
+      }, null, 2);
+    }
+
+    throw err;
+  }
 })();
 
 function parseHttpMessage(buffer: Buffer, type: 'request' | 'response') {
-    const parser = new HTTPParser(
-        type === 'request' ? HTTPParser.REQUEST : HTTPParser.RESPONSE,
-    );
-    const body: Buffer[] = [];
-    let complete = false;
-    let headers: string[] = [];
+  const parser = new HTTPParser(
+    type === 'request' ? HTTPParser.REQUEST : HTTPParser.RESPONSE,
+  );
+  const body: Buffer[] = [];
+  let complete = false;
+  let headers: string[] = [];
 
-    parser.onBody = (t) => {
-        body.push(t);
-    };
+  parser.onBody = (chunk: Buffer) => {
+    body.push(chunk);
+  };
 
-    parser.onHeadersComplete = (res) => {
-        headers = res.headers;
-    };
+  parser.onHeadersComplete = (res: any) => {
+    headers = res.headers || [];
+  };
 
-    parser.onMessageComplete = () => {
-        complete = true;
-    };
+  parser.onMessageComplete = () => {
+    complete = true;
+  };
 
-    parser.execute(buffer);
-    parser.finish();
+  parser.execute(buffer);
+  parser.finish();
 
-    if (!complete) throw new Error(`Could not parse ${type.toUpperCase()}`);
+  if (!complete) {
+    throw new Error(`Could not parse ${type.toUpperCase()}`);
+  }
 
-    return {
-        info: buffer.toString('utf-8').split('\r\n')[0] + '\r\n',
-        headers,
-        body,
-    };
+  return {
+    info: buffer.toString('utf-8').split('\r\n')[0] + '\r\n',
+    headers,
+    body,
+  };
 }

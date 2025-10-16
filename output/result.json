@@ -1,0 +1,120 @@
+{
+  "logs": [
+    {
+      "type": "log",
+      "message": "[⏳] Starting headless-browser...",
+      "timestamp": "2025-10-16T09:58:12.863Z"
+    },
+    {
+      "type": "log",
+      "message": "[🌐] Go to Website https://www.honest.com/bath-and-body/bath-body-shower",
+      "timestamp": "2025-10-16T09:58:14.836Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: cookies",
+      "timestamp": "2025-10-16T09:58:20.554Z"
+    },
+    {
+      "type": "log",
+      "message": "[🛒] Closening cookies...",
+      "timestamp": "2025-10-16T09:58:20.554Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:20.651Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: goToProduct",
+      "timestamp": "2025-10-16T09:58:25.653Z"
+    },
+    {
+      "type": "log",
+      "message": "[🛒] Go to first product page...",
+      "timestamp": "2025-10-16T09:58:25.654Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:25.783Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: addToCart",
+      "timestamp": "2025-10-16T09:58:30.785Z"
+    },
+    {
+      "type": "log",
+      "message": "[🛒] Adding product to cart...",
+      "timestamp": "2025-10-16T09:58:30.785Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:30.857Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: toCheckout",
+      "timestamp": "2025-10-16T09:58:35.859Z"
+    },
+    {
+      "type": "log",
+      "message": "[🛍️] Viewing cart...",
+      "timestamp": "2025-10-16T09:58:35.859Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: enterCoupon",
+      "timestamp": "2025-10-16T09:58:39.590Z"
+    },
+    {
+      "type": "log",
+      "message": "[💳] Entering coupon code...",
+      "timestamp": "2025-10-16T09:58:39.590Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:39.676Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Action: checkCoupon",
+      "timestamp": "2025-10-16T09:58:44.675Z"
+    },
+    {
+      "type": "log",
+      "message": "[✅] Checking coupon code...",
+      "timestamp": "2025-10-16T09:58:44.676Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:44.728Z"
+    },
+    {
+      "type": "log",
+      "message": "[🎉🎉🎉] Coupon is valid!",
+      "timestamp": "2025-10-16T09:58:52.749Z"
+    },
+    {
+      "type": "log",
+      "message": "[👉] Clear action: clearCoupon",
+      "timestamp": "2025-10-16T09:58:52.749Z"
+    },
+    {
+      "type": "log",
+      "message": "[🛒] Deleting coupon code...",
+      "timestamp": "2025-10-16T09:58:52.749Z"
+    },
+    {
+      "type": "log",
+      "message": "⏳ Waiting 5000ms after action",
+      "timestamp": "2025-10-16T09:58:52.791Z"
+    }
+  ],
+  "couponIsValid": true
+}

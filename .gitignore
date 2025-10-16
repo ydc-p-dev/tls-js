@@ -7,6 +7,7 @@ test-build/
 ./demo/node_modules
 utils/tlsn
 .vscode
+.env
 
 # Playwright
 /test-results/

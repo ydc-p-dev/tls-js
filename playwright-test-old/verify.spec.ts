@@ -1,12 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const targetDomain = process.env.TARGET_DOMAIN;
-
 test('verify', async ({ page }) => {
-    // log browser console messages
-    // page.on('console', (msg) => {
-    //   console.log(`[BROWSER ${msg.type().toUpperCase()}] ${msg.text()}`);
-    // });
 
     await page.goto('/verify');
 
@@ -14,5 +8,6 @@ test('verify', async ({ page }) => {
 
     const json = await page.getByTestId('verify').innerText();
     const { sent, recv } = JSON.parse(json);
-    // expect(sent).toContain(`host: ${targetDomain}`);
+
+    // expect(sent).toContain('host: myprotein.ro');
 });

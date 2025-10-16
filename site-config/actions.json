@@ -1,0 +1,144 @@
+{
+  "defaultWaitTime": 1000,
+  "sites": {
+    "modaoperandi.com": {
+      "baseUrl": "https://www.modaoperandi.com",
+      "productUrl": "https://www.modaoperandi.com/women/products/bags",
+      "type": "playwright",
+      "actions": [
+        { "name": "goToProduct", "selectors": ["a.VariantCell__image"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "cookies", "selectors": ["#_evidon-accept-button"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closening cookies..." },
+        { "name": "popupModal", "selectors": ["button[aria-label=\"Close\"].EmailSignup__close"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closing popup modal..." },
+        { "name": "addToCart", "selectors": ["button.AddToBagButton"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "viewCart", "selectors": [], "type": "goto", "url":"https://www.modaoperandi.com/shopping-bag", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "openCouponInput", "selectors": ["button[aria-label=\"Add Gift Code\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[💳] Open coupon input..."  },
+        { "name": "enterCoupon", "selectors": ["input[data-testid=\"giftCodeInput\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "checkCoupon", "selectors": ["button[aria-label=\"Apply Gift Code\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "button[data-testid=\"changeGiftCode\"]",
+        "validText": "Edit Code"
+      },
+      "clearCoupon": {
+        "actions": [
+          { "name": "openClearCoupon", "selectors": ["button[data-testid=\"changeGiftCode\"]"], "type": "click", "waitAfter": 3000, "required" : true, "event" : "[🛒] Open coupon code..." },
+          { "name": "clearCoupon", "selectors": ["button[data-testid=\"cancelGiftCode\"]"], "type": "click", "waitAfter": 3000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
+        ]
+      }
+    },
+    "blocked": {
+      "baseUrl": "https://www.thredup.com",
+      "productUrl": "https://www.thredup.com/handbags?department_tags=handbags",
+      "type": "playwright",
+      "actions": [
+        { "name": "goToProduct", "selectors": ["a[data-inp-label=\"link-item-card\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "addToCart", "selectors": ["button:has-text(\"Add to cart\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "viewCart", "selectors": ["a[aria-label=\"Cart\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "clearCoupon", "selectors": ["button[aria-label^=\"Remove promo code\"]"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[💳] Clear default coupon code..."  },
+        { "name": "enterCoupon", "selectors": ["input[id=\"promo\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "checkCoupon", "selectors": ["button:has-text(\"Apply\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "button[aria-label^=\"Remove promo code\"]",
+        "validText": "Remove promo code"
+      }
+    },
+    "carturesti.ro": {
+      "baseUrl": "https://carturesti.ro",
+      "productUrl": "https://carturesti.ro/offer/carti-la-pret-de-chilipirrr-5981?stock_label=in-stoc,stoc-limitat&price_diff=-1",
+      "type": "playwright",
+      "actions": [
+        { "name": "goToProduct", "selectors": ["a[data-product-id]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "cookies", "selectors": ["a[aria-label=\"allow cookies\"]"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closing cookies..." },
+        { "name": "addToCart", "selectors": ["button.adauga-in-cos"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "toCheckout", "selectors": [], "type": "goto", "url":"https://carturesti.ro/checkout", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "enterCoupon", "selectors": ["input[id=\"checkoutvoucherform-code\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "checkCoupon", "selectors": ["button[id=\"send-voucher\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "#add-coupon-to-cart-event",
+        "validText": "Voucher"
+      },
+      "clearCoupon": {
+        "actions": [
+          { "name": "clearCoupon", "selectors": ["a.remove-voucher"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
+        ]
+      }
+    },
+    "myprotein.ro": {
+      "baseUrl": "https://myprotein.ro",
+      "productUrl": "https://www.myprotein.ro/c/nutrition/protein/",
+      "type": "playwright",
+      "actions": [
+        { "name": "goToProduct", "selectors": ["a[data-track=\"selectItem\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "cookies", "selectors": ["a[aria-label=\"allow cookies\"]"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closing cookies..." },
+        { "name": "addToCart", "selectors": ["button[aria-label=\"Adăugați produsul în coș\"]", "#add-to-basket"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "toCheckout", "selectors": [], "type": "goto", "url":"https://www.myprotein.ro/basket/", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "enterCoupon", "selectors": ["input[id=\"promo-code-input\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "popupModal", "selectors": ["button[aria-label=\"Close modal\"]" ], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closing popup modal..." },
+        { "name": "checkCoupon", "selectors": ["button[id=\"promo-code-add\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "#promo-error-message .bg-green-100",
+        "validText": "REDUCERE"
+      },
+      "clearCoupon": {
+        "actions": [
+          { "name": "clearCoupon", "selectors": ["#promo-code-remove"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
+        ]
+      }
+    },
+    "gymbeam.ro": {
+      "baseUrl": "https://gymbeam.ro",
+      "productUrl": "https://gymbeam.ro/proteine",
+      "type": "playwright",
+      "actions": [
+        { "name": "goToProduct", "selectors": ["a[id^=\"product_item_\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "cookies", "selectors": ["#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closening cookies..." },
+        { "name": "addToCart", "selectors": ["button[aria-label=\"Adăugați în coș\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "toCheckout", "selectors": [], "type": "goto", "url":"https://gymbeam.ro/checkout/cart", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "popupModal", "selectors": ["svg[aria-label=\"Alegeți cadoul vostru\"]" ], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closing popup modal..." },
+        { "name": "openCouponInput", "selectors": ["button[aria-controls=\"coupon-form-section\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[💳] Open coupon input..."  },
+        { "name": "enterCoupon", "selectors": ["input[name=\"coupon\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "checkCoupon", "selectors": ["button[aria-label=\"Folosiți codul de reducere\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "span:has-text(\"Cupoane aplicate:\")",
+        "validText": "Cupoane aplicate:"
+      },
+      "clearCoupon": {
+        "actions": [
+          { "name": "clearCoupon", "selectors": ["button:has-text(\"Eliminați\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
+        ]
+      }
+    },
+    "honest.com": {
+      "baseUrl": "https://honest.com",
+      "productUrl": "https://www.honest.com/bath-and-body/bath-body-shower",
+      "type": "playwright",
+      "actions": [
+        { "name": "cookies", "selectors": ["#onetrust-accept-btn-handler"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[🛒] Closening cookies..." },
+        { "name": "goToProduct", "selectors": ["a.product-image-link"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
+        { "name": "addToCart", "selectors": ["button[class^=\"add-to-cart\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
+        { "name": "toCheckout", "selectors": [], "type": "goto", "url":"https://www.honest.com/cart", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
+        { "name": "enterCoupon", "selectors": ["#couponCode"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
+        { "name": "checkCoupon", "selectors": ["button.promo-code-btn"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
+      ],
+      "waitTime": 3000,
+      "codeValidation": {
+        "element": "span.coupon-applied",
+        "validText": "Applied"
+      },
+      "clearCoupon": {
+        "actions": [
+          { "name": "clearCoupon", "selectors": ["button.remove-coupon"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
+        ]
+      }
+    }
+  }
+}
