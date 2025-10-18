@@ -1,4 +1,3 @@
-// test/new/integration.spec.ts
 import {
   Commit,
   mapStringToRange,
@@ -12,6 +11,7 @@ import {
 import * as Comlink from 'comlink';
 import { HTTPParser } from 'http-parser-js';
 import configData from '../../site-config/config.json';
+import * as Console from 'node:console';
 const config = configData;
 
 
@@ -32,7 +32,7 @@ interface RuntimeConfig {
   maxSentData: number;
   maxRecvData: number;
   outputFile?: string;
-  description?: string;
+  filename?: string;
 }
 
 function extractDomainFromUrl(url: string): string {
@@ -68,10 +68,15 @@ function getTargetDomain(): string {
 async function getSiteConfig(): Promise<RuntimeConfig> {
   let requestData = null;
   try {
-    const response = await fetch('http://127.0.0.1:3002/request-data');
-    requestData = await response.json();
-    console.log(requestData);
-  } catch (err) {}
+    const response = await fetch('http://localhost:3001/api/request-data');
+    const responseData = await response.json();
+    if (response.ok) {
+      requestData = responseData;
+    }
+    console.log('REQUEST DATA FETCH:', requestData)
+  } catch (err) {
+    console.log('REQUEST DATA FETCH ERROR:', err)
+  }
 
   const targetDomain = getTargetDomain();
   console.log('TARGET_DOMAIN:', targetDomain || 'not provided');
@@ -88,7 +93,8 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
   const domain = extractDomainFromUrl(siteConfig.applyCouponUrl);
   const defaults = {
-    notaryUrl: 'http://127.0.0.1:7047',
+    // notaryUrl: 'http://127.0.0.1:7047',
+    notaryUrl: 'http://notary-server:7047',
     proxyUrl: 'ws://127.0.0.1:55688',
     maxSentData: 4096,
     maxRecvData: 16384,
@@ -96,6 +102,8 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
   if(siteConfig === requestData) {
     console.log('requestData SELECTED')
+  } else {
+    console.log('NO REQUEST DATA. siteConfig SELECTED')
   }
 
   let method = 'POST';
@@ -108,16 +116,16 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     domain: domain,
     url: siteConfig.applyCouponUrl,
     method,
-    body: requestData ? JSON.parse(requestData.payload) : siteConfig.payload,
+    body: requestData ? JSON.parse(siteConfig.payload) : siteConfig.payload,
     headers: siteConfig.headers || {
       'content-type': 'application/json',
     },
     cookies: siteConfig?.cookies || '',
     notaryUrl: defaults.notaryUrl!,
     proxyUrl: defaults.proxyUrl!,
-    maxSentData: siteConfig.maxSentData || defaults.maxSentData!,
-    maxRecvData: siteConfig.maxRecvData || defaults.maxRecvData!,
-    description: siteConfig.description,
+    maxSentData: defaults.maxSentData!,
+    maxRecvData: defaults.maxRecvData!,
+    filename: siteConfig.filename,
   };
 }
 
@@ -151,6 +159,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
   console.log('\n🚀 TLSNotary Integration Test');
   console.log('═══════════════════════════════════════');
   console.log('🎯 Domain:     ', siteConfig.domain);
+  console.log('📥 Filename:   ', siteConfig.filename);
   console.log('🌐 URL:        ', siteConfig.url);
   console.log('📡 Method:     ', siteConfig.method);
   console.log('🔐 Notary:     ', siteConfig.notaryUrl);
@@ -158,9 +167,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
   console.log('📤 Max Sent:   ', siteConfig.maxSentData, 'bytes');
   console.log('📥 Max Recv:   ', siteConfig.maxRecvData, 'bytes');
 
-  if (siteConfig.outputFile) {
-    console.log('💾 Output:     ', siteConfig.outputFile);
-  }
   console.log('═══════════════════════════════════════');
   console.log('📦 Payload:');
   console.log(JSON.stringify(siteConfig.body, null, 2));
@@ -307,22 +313,41 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
     // Експорт JSON
     const json = await presentation.json();
 
-    // Генеруємо ім'я файлу
+
+    //Генеруємо ім'я файлу
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const domainKey = process.env.TARGET_DOMAIN || siteConfig.domain;
-    const fileName = siteConfig.outputFile ||
-      `proof_${domainKey}_${timestamp}.json`;
+    const fileName = `${siteConfig.filename}.json` || `proof_${domainKey}_${timestamp}.json`;
+
+//Відправка на сервер
+    await fetch('http://localhost:3001/api/save-proof', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: fileName,
+        data: json,
+      }),
+    }).then(res => res.json())
+      .then(res => console.log('💾 SERVER response:', res))
+      .catch(err => console.error('❌ Failed to save proof on server:', err));
+
+    console.log('💾 Proof sent to server for saving');
+
+
+
 
     // Збереження в файл
-    const blob = new Blob([JSON.stringify(json, null, 2)], {
-      type: "application/json"
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    console.log('💾 Proof saved to:', fileName);
+    // const blob = new Blob([JSON.stringify(json, null, 2)], {
+    //   type: "application/json"
+    // });
+    // const url = URL.createObjectURL(blob);
+    // const a = document.createElement("a");
+    // a.href = url;
+    // a.download = fileName;
+    // a.click();
+    // console.log('💾 Proof saved to:', fileName);
 
     // Верифікація
     console.log('⏳ Verifying...');
@@ -372,7 +397,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
           recvBytes: recv.length,
           proofSize: serialized.length,
         },
-        outputFile: fileName,
       }, null, 2);
     }
 

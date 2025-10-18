@@ -1,0 +1,21 @@
+# .dockerignore
+node_modules
+npm-debug.log
+.git
+.gitignore
+.DS_Store
+*.md
+.env
+dist
+output/proofs
+output/temp
+test-results
+test-build
+playwright-report
+.vscode
+.idea
+*.log
+
+# Зберегти важливі файли
+!package.json
+!package-lock.json

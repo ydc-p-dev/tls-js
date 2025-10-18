@@ -31,18 +31,19 @@ function extractHostPort(url: string): { host: string; port: number } {
 // Отримати конфігурацію для домену
 let proxyTarget = 'example.com:443'; // дефолт
 let wsProxyCommand = '';
+const bindAddress = process.env.WS_BIND_ADDR || '0.0.0.0:55688';
 
 if (targetDomain && config.sites && config.sites[targetDomain]) {
   const siteConfig = config.sites[targetDomain];
   const { host, port } = extractHostPort(siteConfig.applyCouponUrl);
   proxyTarget = `${host}:${port}`;
-  wsProxyCommand = `wstcp --bind-addr 127.0.0.1:55688 ${proxyTarget}`;
+  wsProxyCommand = `wstcp --bind-addr ${bindAddress} ${proxyTarget}`;
 
   console.log('🌐 WebSocket Proxy will connect to:', proxyTarget);
 } else if (targetDomain) {
   // Якщо домен вказаний, але немає в конфігу - використати його напряму
   proxyTarget = `${targetDomain}:443`;
-  wsProxyCommand = `wstcp --bind-addr 127.0.0.1:55688 ${proxyTarget}`;
+  wsProxyCommand = `wstcp --bind-addr ${bindAddress} ${proxyTarget}`;
 
   console.log('⚠️  Domain not in config, using:', proxyTarget);
 }
@@ -74,11 +75,19 @@ export default defineConfig({
   ],
 
   webServer: [
+    // {
+    //   command: 'npm run build:test && npm run serve:test',
+    //   url: 'http://localhost:3001',
+    //   reuseExistingServer: !process.env.CI,
+    //   timeout: 120000,
+    // },
     {
-      command: 'npm run build:test && npm run serve:test',
+      // Сервер НЕ запускається через webServer в Docker
+      // Він вже запущений через docker-entrypoint.sh
+      command: 'echo "Server already running in Docker"',
       url: 'http://localhost:3001',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120000,
+      reuseExistingServer: true,
+      timeout: 5000,
     },
     // 🎯 Динамічний WebSocket Proxy
     ...(wsProxyCommand ? [{

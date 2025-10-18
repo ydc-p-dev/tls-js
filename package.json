@@ -12,20 +12,17 @@
   ],
   "scripts": {
     "build:test": "webpack --config webpack.web.dev.config.js",
-    "serve:test": "serve  --config ../serve.json ./test-build -l 3001",
-    "build:src": "webpack --config webpack.build.config.js",
-    "build:types": "tsc --project tsconfig.compile.json",
-    "build:lib": "NODE_ENV=production concurrently npm:build:src npm:build:types",
-    "build:wasm": "sh tlsn-wasm/build.sh v0.1.0-alpha.12",
-    "build": "npm run build:lib",
-    "watch:dev": "webpack --config webpack.web.dev.config.js --watch",
-    "dev": "concurrently npm:watch:dev npm:serve:test",
-    "lint:eslint": "eslint . --fix",
-    "lint:tsc": "tsc --noEmit",
-    "lint": "concurrently npm:lint:tsc npm:lint:eslint",
-    "test": "playwright test",
-    "notary": "docker run --platform=linux/amd64 -p 7047:7047 --rm ghcr.io/tlsnotary/tlsn/notary-server:v0.1.0-alpha.12 --help",
-    "notarize": "node coupon/notarize.js"
+    "serve:test:old": "serve --config ../serve.json ./test-build -l 3001",
+    "serve:test": "node server.js",
+    "dev": "concurrently npm:watch:dev \"npm run serve:test\"",
+    "notarize": "node coupon/notarize.js",
+    "docker:build": "docker build -t tls-notary:latest .",
+    "docker:run": "docker run -d --name tls-notary -p 3001:3001 -v $(pwd)/output:/app/output tls-notary:latest",
+    "docker:stop": "docker stop tls-notary && docker rm tls-notary",
+    "docker:logs": "docker logs -f tls-notary",
+    "compose:up": "docker-compose up -d",
+    "compose:down": "docker-compose down",
+    "compose:logs": "docker-compose logs -f"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
@@ -41,6 +38,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
+    "express": "^5.1.0",
     "file-loader": "^5.0.2",
     "html-webpack-plugin": "~5.3.2",
     "http-parser-js": "^0.5.9",
@@ -68,6 +66,7 @@
     "node": ">= 16.20.2"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "tlsn-js": "^0.1.0-alpha.12.0",
     "tlsn-wasm": "0.1.0-alpha.12"
   },

@@ -1,0 +1,46 @@
+# docker-compose.yml
+services:
+  notary-server:
+    image: ghcr.io/tlsnotary/tlsn/notary-server:latest
+    platform: linux/amd64
+    container_name: notary-server
+    ports:
+      - "7047:7047"
+    networks:
+      - tls-network
+    restart: unless-stopped
+    # healthcheck видалено
+
+  tls-notary-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: tls-notary-app
+    ports:
+      - "3001:3001"
+      - "55688:55688"
+    volumes:
+      - ./output:/app/output
+      - ./site-config:/app/site-config:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - PROOFS_DIR=/app/output/proofs
+      - BROWSER_HEADLESS=true
+      - NOTARY_URL=http://notary-server:7047
+    depends_on:
+      - notary-server  # ← Просто чекає запуску, без перевірки здоров'я
+    networks:
+      - tls-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/proofs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  tls-network:
+    driver: bridge

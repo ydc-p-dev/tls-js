@@ -1,81 +1,145 @@
+// coupon/validate.js
 const { firefox } = require('playwright');
 const fs = require('fs');
-const path = require('path');
 const actions = require('../site-config/actions.json');
 const {sites} = require('../site-config/config.json');
-const { notarize } = require('./notarize');
-
-const express = require('express');
-
-const app = express();
-const port = 3002;
-let server = null;
-const startTime = Date.now();
-
-// Start server
-server = app.listen(port, () => console.log(`Server for request.json at http://localhost:${port}`));
-
-// Serve JSON dynamically
-app.get('/request-data', (req, res) => {
-  const requestPath = path.join(__dirname, '../output/temp/request.json');
-  if (!fs.existsSync(requestPath)) return res.status(404).json({ error: 'File not found' });
-  try {
-    const data = JSON.parse(fs.readFileSync(requestPath, 'utf8'));
-    res.json(data);
-  } catch (errr) {
-    res.status(500).json({ error: 'Failed to read JSON' });
-  }
-});
-
 
 const outputDir = './output';
 const tempRequestFilePath = `${outputDir}/temp/request.json`;
-let logs = [];
-let page;
-let currentAction;
-let applyCouponUrl;
-let applyCouponRequest;
-let applyCouponMethod;
-// const requests = [];
+const tempDir = `${outputDir}/temp`;
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, {recursive: true});
+}
 
-(async () => {
+/**
+ * Валідувати купон через браузер
+ * @param {Object} options - Options
+ * @param {string} options.coupon - Coupon code
+ * @param {string} options.domain - Domain
+ * @param {string} options.filename - Filename
+ * @param {string} [options.productUrl] - Product URL (used_on_product_url)
+ * @param {Object} [options.siteConfig] - Custom site config
+ * @returns {Promise<Object>} Result with applyCouponRequest if valid
+ * @throws {Error} If coupon is invalid or validation fails
+ */
+async function validateCoupon(options) {
+  const startTime = Date.now();
+
+  let logs = [];
+  let page;
+  let currentAction;
+  let applyCouponUrl;
+  let applyCouponRequest;
+  let applyCouponMethod;
   let browser;
-  try {
-    const args = Object.fromEntries(
-      process.argv.slice(2).map(a => a.replace(/^--/, '').split(/=(.*)/s).slice(0,2))
-    );
 
-    const {coupon, domain, config, used_on_product_url} = args;
+  const log = (message) => {
+    console.log(message);
+    logs.push({ type: 'log', message, timestamp: new Date().toISOString() });
+  };
 
-    if (!coupon || !domain) {
-      error('❌ Missing required parameters: --coupon and --domain');
-      log('Usage: node index.js --coupon=YOUR_COUPON --domain=YOUR_DOMAIN');
-      return;
+  const error = (message) => {
+    console.error(message);
+    logs.push({ type: 'error', message, timestamp: new Date().toISOString() });
+  };
+
+  async function retryWaitForSelector(page, selector, options = {}, maxAttempts = 3, delayBetween = 1000, required = true) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await page.waitForSelector(selector, options);
+      } catch (e) {
+        log(`🔁 Attempt ${attempt} failed for selector "${selector}"`);
+        if (attempt === maxAttempts || !required) {
+          log(`Selector "${selector}" not found after ${maxAttempts} attempts.`);
+          return false;
+        }
+        await new Promise(res => setTimeout(res, delayBetween));
+      }
+    }
+  }
+
+  async function clearSiteStorage(page) {
+    log('🧹 [CLEANUP] Starting site data cleanup...');
+
+    try {
+      await page.context().clearCookies();
+      log('🍪 Cookies cleared');
+    } catch (err) {
+      log('⚠️ Failed to clear cookies:', err.message);
     }
 
+    await page.evaluate(async () => {
+      try { localStorage.clear(); } catch {}
+      try { sessionStorage.clear(); } catch {}
+
+      try {
+        if (indexedDB?.databases) {
+          const dbs = await indexedDB.databases();
+          for (const db of dbs) {
+            if (db.name) await new Promise((res, rej) => {
+              const req = indexedDB.deleteDatabase(db.name);
+              req.onsuccess = req.onerror = req.onblocked = () => res();
+            });
+          }
+        }
+      } catch {}
+
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      } catch {}
+
+      try {
+        if (navigator.serviceWorker?.getRegistrations) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+      } catch {}
+    });
+
+    log('✅ [CLEANUP] Cleanup completed');
+  }
+
+  function formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  }
+
+  try {
+    const {coupon, domain, productUrl, filename, siteConfig: customConfig} = options;
+
+    if (!coupon || !domain || !filename) {
+      throw new Error('Missing required parameters: coupon and domain');
+    }
 
     let siteConfig;
     try {
-      siteConfig = config ? JSON.parse(config) : actions.sites?.[domain];
+      siteConfig = customConfig || actions.sites?.[domain];
     } catch (e) {
-      error(`❌ Invalid JSON in --config: ${e.message}`);
-      return;
+      throw new Error(`Invalid config: ${e.message}`);
     }
 
     if (!siteConfig) {
-      error(`❌ Domain "${domain}" not found in actions.json`);
-      return;
+      throw new Error(`Domain "${domain}" not found in actions.json`);
     }
 
-
-    if (typeof used_on_product_url === 'string') {
-      siteConfig.productUrl = used_on_product_url;
+    if (typeof productUrl === 'string') {
+      siteConfig.productUrl = productUrl;
     }
 
     log('[⏳] Starting headless-browser...');
-    let  browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
+    let browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
 
-    const browser = await firefox.launch({
+    browser = await firefox.launch({
       headless: browserHeadless
     });
 
@@ -97,9 +161,9 @@ let applyCouponMethod;
 
     try {
       applyCouponUrl = sites[domain].applyCouponUrl;
-      applyCouponMethod = sites[domain].method ?? "POST"
+      applyCouponMethod = sites[domain].method ?? "POST";
       log(`[🌐] Go to Website ${siteConfig.productUrl}`);
-      await page.goto(siteConfig.productUrl, {waitUntil: 'domcontentloaded', timeout: 60000});
+      await page.goto(siteConfig.productUrl, {waitUntil: 'domcontentloaded', timeout: 180000});
       await page.waitForLoadState('load', {timeout: 10000}).catch(() => {
         log('⚠️ Page load timeout, continuing anyway...');
       });
@@ -114,14 +178,14 @@ let applyCouponMethod;
         if (currentAction === 'checkCoupon' && url.startsWith(applyCouponUrl) && method === applyCouponMethod) {
           applyCouponRequest = {
             domain,
+            filename,
             applyCouponUrl: url,
             method,
             headers,
             payload: postData,
             timestamp: new Date().toISOString()
           };
-          // FOR TESTING
-          // requests.push(applyCouponRequest);
+          // console.log("APPLY COUPON REQUEST",applyCouponRequest);
         }
       });
 
@@ -162,8 +226,7 @@ let applyCouponMethod;
                 break;
               }
             }
-          }
-          else {
+          } else {
             try {
               if (action.type === 'goto') {
                 await page.goto(action.url, { waitUntil: 'networkidle' });
@@ -191,7 +254,7 @@ let applyCouponMethod;
         log('[❌❌❌] Coupon is not valid.');
       }
 
-      if (siteConfig?.clearCoupon?.actions.length) {
+      if (siteConfig?.clearCoupon?.actions.length && couponIsValid === true) {
         for (let action of siteConfig?.clearCoupon?.actions) {
           log(`[👉] Clear action: ${action.name}`);
           log(action.event);
@@ -204,12 +267,12 @@ let applyCouponMethod;
                   state: 'attached'
                 }, 5, 1000, action.required);
                 if (issetSelector) {
-                    const el = await page.$(selector);
-                    if (el) {
-                      await el.evaluate(el => {
-                        el.click()
-                      });
-                    }
+                  const el = await page.$(selector);
+                  if (el) {
+                    await el.evaluate(el => {
+                      el.click()
+                    });
+                  }
                   if (action.waitAfter) {
                     log(`⏳ Waiting ${action.waitAfter}ms after action`);
                     await new Promise(resolve => setTimeout(resolve, action.waitAfter));
@@ -228,139 +291,57 @@ let applyCouponMethod;
 
     } catch (err) {
       error(`❌ Unexpected error: ${err?.message}`);
+      throw err;
     }
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, {recursive: true});
     }
-    //FOR TESTING
-    // console.log('applyCouponRequests:', requests);
+
     const html = await page.content();
     await page.screenshot({path: `${outputDir}/screenshot.png`, fullPage: true});
     fs.writeFileSync(`${outputDir}/html_snapshot.html`, html);
     fs.writeFileSync(`${outputDir}/result.json`, JSON.stringify({logs, couponIsValid}, null, 2));
 
-    if (couponIsValid) {
-      try {
-        await fs.writeFileSync(tempRequestFilePath, JSON.stringify(applyCouponRequest, null, 2));
-        await notarize(domain);
-      } catch (eer){
-        console.log('Notarize error',eer?.message);
-      }
-      finally {
-        fs.unlinkSync(tempRequestFilePath);
-      }
+    // Зберегти applyCouponRequest в temp файл
+    if (couponIsValid && applyCouponRequest) {
+     await fs.writeFileSync(tempRequestFilePath, JSON.stringify(applyCouponRequest, null, 2));
     }
 
-  } catch (e) {
-    error(`❌ Unexpected error: ${e.message}`);
-    process.exit(1);
-  } finally {
-    if (server) {
-      server.close(async () => {
-        console.log('Server stopped.');
-      });
-    }
     await clearSiteStorage(page);
-    if (browser) {
-      await browser.close();
-    }
-    process.exit(0);
 
     const endTime = Date.now();
     const duration = endTime - startTime;
-
     log(`⏱️  Duration: ${formatDuration(duration)}`);
-     // Exit successfully
-  }
 
-})();
+    // Якщо купон НЕ валідний - throw error
+    if (!couponIsValid) {
+      throw new Error('Coupon is not valid');
+    }
 
+    // Якщо валідний - повернути результат
+    return {
+      success: true,
+      coupon: coupon,
+      domain: domain,
+      applyCouponRequest: applyCouponRequest,
+      logs: logs,
+      duration: formatDuration(duration),
+      timestamp: new Date().toISOString()
+    };
 
-async function clearSiteStorage(page) {
-  log('🧹 [CLEANUP] Starting site data cleanup...');
-
-  try {
-    await page.context().clearCookies();
-    log('🍪 Cookies cleared');
   } catch (err) {
-    log('⚠️ Failed to clear cookies:', err.message);
-  }
-
-  // чистимо storage на поточному origin
-  await page.evaluate(async () => {
-    try { localStorage.clear(); log('📦 localStorage cleared'); } catch {}
-    try { sessionStorage.clear(); log('📦 sessionStorage cleared'); } catch {}
-
-    try {
-      // IndexedDB
-      if (indexedDB?.databases) {
-        const dbs = await indexedDB.databases();
-        for (const db of dbs) {
-          if (db.name) await new Promise((res, rej) => {
-            const req = indexedDB.deleteDatabase(db.name);
-            req.onsuccess = req.onerror = req.onblocked = () => res();
-          });
-        }
-        log('💾 IndexedDB cleared');
-      }
-    } catch {}
-
-    try {
-      // Cache Storage (service worker caches)
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-      log('🗄️ Cache Storage cleared');
-    } catch {}
-
-    try {
-      // Service Workers
-      if (navigator.serviceWorker?.getRegistrations) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(r => r.unregister()));
-        log('🚫 Service Workers unregistered');
-      }
-    } catch {}
-  });
-
-  log('✅ [CLEANUP] Cleanup completed');
-
-}
-
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`;
-  } else {
-    return `${seconds}s`;
-  }
-}
-function log(message) {
-  console.log(message);
-  logs.push({ type: 'log', message, timestamp: new Date().toISOString() });
-}
-
-function error(message) {
-  console.error(message);
-  logs.push({ type: 'error', message, timestamp: new Date().toISOString() });
-}
-
-async function retryWaitForSelector(page, selector, options = {}, maxAttempts = 3, delayBetween = 1000, required = true) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await page.waitForSelector(selector, options);
-    } catch (e) {
-      log(`🔁 Attempt ${attempt} failed for selector "${selector}"`);
-      if (attempt === maxAttempts || !required) {
-        log(`Selector "${selector}" not found after ${maxAttempts} attempts.`);
-        return false;
-      }
-      await new Promise(res => setTimeout(res, delayBetween));
+    error(`❌ Error: ${err?.message}`);
+    throw err;
+  } finally {
+    if (page) {
+      await clearSiteStorage(page);
+    }
+    if (browser) {
+      await browser.close();
     }
   }
 }
 
+// Експорт
+module.exports = { validateCoupon };

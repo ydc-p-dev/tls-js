@@ -16,17 +16,17 @@ test('integration', async ({ page }) => {
   }, targetDomain);
 
   // Логування для дебагу
-  // page.on('console', msg => {
-  //   const text = msg.text();
-  //   // Фільтруємо шум
-  //   if (!text.includes('DevTools') && !text.includes('Download')) {
-  //     console.log('  [Browser]:', text);
-  //   }
-  // });
-  //
-  // page.on('pageerror', error => {
-  //   console.error('  [Browser Error]:', error.message);
-  // });
+  page.on('console', msg => {
+    const text = msg.text();
+    // Фільтруємо шум
+    if (!text.includes('DevTools') && !text.includes('Download')) {
+      console.log('  [Browser]:', text);
+    }
+  });
+
+  page.on('pageerror', error => {
+    console.error('  [Browser Error]:', error.message);
+  });
 
   const base = process.env.BASE_URL || 'http://localhost:3001'; // або порт твого сервера
   const fullUrl = `${base}/integration.html?domain=${encodeURIComponent(targetDomain)}`;
