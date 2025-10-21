@@ -2,7 +2,6 @@
 const { firefox } = require('playwright');
 const fs = require('fs');
 const actions = require('../site-config/actions.json');
-const {sites} = require('../site-config/config.json');
 
 const outputDir = './output';
 const tempRequestFilePath = `${outputDir}/temp/request.json`;
@@ -115,7 +114,7 @@ async function validateCoupon(options) {
   }
 
   try {
-    const {coupon, domain, productUrl, filename, siteConfig: customConfig} = options;
+    const {coupon, domain, productUrl, filename, customActions} = options;
 
     if (!coupon || !domain || !filename) {
       throw new Error('Missing required parameters: coupon and domain');
@@ -123,13 +122,13 @@ async function validateCoupon(options) {
 
     let siteConfig;
     try {
-      siteConfig = customConfig || actions.sites?.[domain];
+      siteConfig = customActions ?? actions?.sites?.[domain];
     } catch (e) {
       throw new Error(`Invalid config: ${e.message}`);
     }
 
     if (!siteConfig) {
-      throw new Error(`Domain "${domain}" not found in actions.json`);
+      throw new Error(`siteConfig not found`);
     }
 
     if (typeof productUrl === 'string') {
@@ -160,8 +159,8 @@ async function validateCoupon(options) {
     let couponIsValid = false;
 
     try {
-      applyCouponUrl = sites[domain].applyCouponUrl;
-      applyCouponMethod = sites[domain].method ?? "POST";
+      applyCouponUrl = siteConfig?.requestParams?.applyCouponUrl;
+      applyCouponMethod = siteConfig?.requestParams?.method ?? "POST";
       log(`[🌐] Go to Website ${siteConfig.productUrl}`);
       await page.goto(siteConfig.productUrl, {waitUntil: 'domcontentloaded', timeout: 180000});
       await page.waitForLoadState('load', {timeout: 10000}).catch(() => {

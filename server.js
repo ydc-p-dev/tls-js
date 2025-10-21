@@ -140,21 +140,41 @@ app.post('/api/save-proof', (req, res) => {
 
 // API для валідації і нотаризації
 app.post('/api/validate-coupon', async (req, res) => {
-  try {
-    const { coupon, domain, productUrl, filename } = req.body;
+  // Очистити temp файли
+  const tempRequestFilePath = path.join(__dirname, '.', 'output/temp/request.json');
+  const tempActionsFilePath = path.join(__dirname, '.', 'output/temp/actions.json');
+  if (fs.existsSync(tempRequestFilePath)) {
+    fs.unlinkSync(tempRequestFilePath);
+    console.log('🧹 Cleaned up temp request file');
+  }
+  if (fs.existsSync(tempActionsFilePath)) {
+    fs.unlinkSync(tempActionsFilePath);
+    console.log('🧹 Cleaned up temp actions file');
+  }
 
-    if (!coupon || !domain) {
+
+  try {
+    const { coupon, domain, productUrl, filename, customActions } = req.body;
+
+    if (!coupon || !domain || !filename) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters: coupon and domain'
+        error: 'Missing required parameters: coupon, domain, filename'
       });
+    }
+
+    if (customActions) {
+      const tempRequestFilePath = `output/temp/actions.json`;
+      await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
     }
 
     console.log('\n🚀 API: Full Flow - Validation → Notarization');
     console.log('═══════════════════════════════════════');
     console.log('   Coupon:', coupon);
     console.log('   Domain:', domain);
+    console.log('   Filename:', filename);
     if (productUrl) console.log('   Product URL:', productUrl);
+    if (customActions) console.log('   Custom Actions: ✅');
     console.log('═══════════════════════════════════════\n');
 
     // 🔍 КРОК 1: Валідація купона
@@ -163,7 +183,8 @@ app.post('/api/validate-coupon', async (req, res) => {
       coupon: coupon,
       domain: domain,
       productUrl: productUrl,
-      filename: filename
+      filename: filename,
+      customActions,
     });
     console.log('✅ Coupon validation successful');
 
@@ -206,12 +227,7 @@ app.post('/api/validate-coupon', async (req, res) => {
       }
     }
 
-    // Очистити temp файл
-    const tempRequestFilePath = './output/temp/request.json';
-    if (fs.existsSync(tempRequestFilePath)) {
-      fs.unlinkSync(tempRequestFilePath);
-      console.log('🧹 Cleaned up temp file');
-    }
+
 
     console.log('\n═══════════════════════════════════════');
     console.log('✅ ALL STEPS COMPLETED SUCCESSFULLY');
@@ -314,6 +330,23 @@ app.get('/api/request-data', (req, res) => {
   }
 });
 
+app.get('/api/get-actions', (req, res) => {
+  const customActions = path.join(__dirname, 'output/temp/actions.json');
+  try {
+    if(fs.existsSync(customActions)) {
+      const data = JSON.parse(fs.readFileSync(customActions, 'utf8'));
+      res.json(data);
+    } else {
+      const requestPath = path.join(__dirname, 'site-config/actions.json');
+      if (!fs.existsSync(requestPath)) return res.status(404).json({ error: 'actions.json not found' });
+      const data = JSON.parse(fs.readFileSync(requestPath, 'utf8'));
+      res.json(data);
+    }
+  } catch (errr) {
+    res.status(500).json({ error: 'Failed to read JSON' });
+  }
+});
+
 // Статичні файли
 app.use(express.static(path.join(__dirname, 'test-build')));
 
@@ -332,230 +365,3 @@ app.listen(PORT, () => {
   console.log('📁 Proofs directory:', PROOFS_DIR);
   console.log('📦 Serving files from:', path.join(__dirname, 'test-build'));
 });
-
-
-
-
-
-
-
-
-// const express = require('express');
-// const path = require('path');
-// const fs = require('fs');
-// const { spawn } = require('child_process');
-// const { validateCoupon } = require('./coupon/validate.js');
-// const { notarize } = require('./coupon/notarize.js');
-//
-// const app = express();
-// const PORT = process.env.PORT || 3001;
-// const PROOFS_DIR = process.env.PROOFS_DIR || path.join(__dirname, 'output/proofs');
-//
-// app.use((req, res, next) => {
-//   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-//   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-//   next();
-// });
-//
-// // Створити директорію для proofs
-// if (!fs.existsSync(PROOFS_DIR)) {
-//   fs.mkdirSync(PROOFS_DIR, { recursive: true });
-//   console.log('📁 Created proofs directory:', PROOFS_DIR);
-// }
-//
-// // JSON parser
-// app.use(express.json({ limit: '50mb' }));
-//
-// app.get('api/request-data', (req, res) => {
-//   const requestPath = path.join(__dirname, '../output/temp/request.json');
-//   if (!fs.existsSync(requestPath)) return res.status(404).json({ error: 'File not found' });
-//   try {
-//     const data = JSON.parse(fs.readFileSync(requestPath, 'utf8'));
-//     res.json(data);
-//   } catch (errr) {
-//     res.status(500).json({ error: 'Failed to read JSON' });
-//   }
-// });
-// // API для збереження proof
-// app.post('/api/save-proof', (req, res) => {
-//   try {
-//     const { filename, data, subdirectory } = req.body;
-//
-//     if (!filename || !data) {
-//       return res.status(400).json({
-//         success: false,
-//         error: 'Missing filename or data'
-//       });
-//     }
-//
-//     let targetDir = PROOFS_DIR;
-//     if (subdirectory) {
-//       targetDir = path.join(PROOFS_DIR, subdirectory);
-//       if (!fs.existsSync(targetDir)) {
-//         fs.mkdirSync(targetDir, { recursive: true });
-//       }
-//     }
-//
-//     const filePath = path.join(targetDir, filename);
-//
-//     const relativePath = path.relative(PROOFS_DIR, filePath);
-//     if (relativePath.startsWith('..')) {
-//       return res.status(403).json({
-//         success: false,
-//         error: 'Invalid file path'
-//       });
-//     }
-//
-//     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-//
-//     const fileSize = (JSON.stringify(data).length / 1024).toFixed(2);
-//     console.log('✅ Proof saved:', filePath);
-//     console.log('   Size:', fileSize, 'KB');
-//
-//     res.json({
-//       success: true,
-//       filename: filename,
-//       path: filePath,
-//       size: fs.statSync(filePath).size,
-//     });
-//
-//   } catch (err) {
-//     console.error('❌ Error saving proof:', err);
-//     res.status(500).json({
-//       success: false,
-//       error: err.message
-//     });
-//   }
-// });
-//
-// // API для списку файлів
-// app.get('/api/proofs', (req, res) => {
-//   try {
-//     const files = fs.readdirSync(PROOFS_DIR)
-//       .filter(f => f.endsWith('.json'))
-//       .map(f => {
-//         const stats = fs.statSync(path.join(PROOFS_DIR, f));
-//         return {
-//           name: f,
-//           size: stats.size,
-//           created: stats.birthtime,
-//           modified: stats.mtime,
-//         };
-//       })
-//       .sort((a, b) => b.modified - a.modified);
-//
-//     res.json({
-//       success: true,
-//       files: files,
-//       directory: PROOFS_DIR,
-//     });
-//   } catch (err) {
-//     res.status(500).json({
-//       success: false,
-//       error: err.message
-//     });
-//   }
-// });
-//
-// // API для завантаження файлу
-// app.get('/api/proofs/:filename', (req, res) => {
-//   try {
-//     const filename = req.params.filename;
-//     const filePath = path.join(PROOFS_DIR, filename);
-//
-//     if (!fs.existsSync(filePath)) {
-//       return res.status(404).json({
-//         success: false,
-//         error: 'File not found'
-//       });
-//     }
-//
-//     res.download(filePath);
-//   } catch (err) {
-//     res.status(500).json({
-//       success: false,
-//       error: err.message
-//     });
-//   }
-// });
-//
-// app.post('/api/validate-coupon', async (req, res) => {
-//   try {
-//     const { coupon, domain, productUrl } = req.body;
-//
-//     if (!coupon || !domain) {
-//       return res.status(400).json({
-//         success: false,
-//         error: 'Missing required parameters'
-//       });
-//     }
-//
-//     console.log('🔍 Step 1: Validating coupon...');
-//
-//     // Валідація
-//     const validationResult = await validateCoupon({
-//       coupon: coupon,
-//       domain: domain,
-//       productUrl: productUrl
-//     });
-//
-//     console.log('✅ Coupon is valid!');
-//
-//     // Нотаризація (applyCouponRequest вже збережено в temp файлі)
-//     console.log('🔐 Step 2: Notarizing...');
-//
-//     const notarizeResult = await notarize(domain, {
-//       output: `proof_${domain}_${coupon}_${Date.now()}.json`
-//     });
-//
-//     console.log('✅ Notarization successful!');
-//
-//     // Видалити temp файл
-//     const tempRequestFilePath = './output/temp/request.json';
-//     if (fs.existsSync(tempRequestFilePath)) {
-//       fs.unlinkSync(tempRequestFilePath);
-//     }
-//
-//     res.json({
-//       success: true,
-//       message: 'Coupon validated and notarized successfully',
-//       coupon: coupon,
-//       domain: domain,
-//       couponValid: true,
-//       notarized: true,
-//       proofFile: notarizeResult.proofFile,
-//       proofPath: notarizeResult.proofPath,
-//       duration: validationResult.duration
-//     });
-//
-//   } catch (err) {
-//     console.error('❌ Error:', err.message);
-//
-//     const isCouponInvalid = err.message.includes('not valid');
-//
-//     res.status(isCouponInvalid ? 400 : 500).json({
-//       success: false,
-//       error: err.message,
-//       couponValid: isCouponInvalid ? false : undefined
-//     });
-//   }
-// });// 🎯 ДОДАТИ endpoint для streaming логів (опціонально)
-//
-// // Статичні файли
-// app.use(express.static(path.join(__dirname, 'test-build')));
-//
-// // Fallback для SPA
-// app.use((req, res) => {
-//   const indexPath = path.join(__dirname, 'test-build', 'index.html');
-//   if (fs.existsSync(indexPath)) {
-//     res.sendFile(indexPath);
-//   } else {
-//     res.status(404).send('Test build not found. Run: npm run build:test');
-//   }
-// });
-//
-// app.listen(PORT, () => {
-//   console.log('🚀 Server running at http://localhost:' + PORT);
-//   console.log('📁 Proofs directory:', PROOFS_DIR);
-//   console.log('📦 Serving files from:', path.join(__dirname, 'test-build'));
-// });

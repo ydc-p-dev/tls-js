@@ -25,24 +25,10 @@
           { "name": "openClearCoupon", "selectors": ["button[data-testid=\"changeGiftCode\"]"], "type": "click", "waitAfter": 3000, "required" : true, "event" : "[🛒] Open coupon code..." },
           { "name": "clearCoupon", "selectors": ["button[data-testid=\"cancelGiftCode\"]"], "type": "click", "waitAfter": 3000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
         ]
-      }
-    },
-    "blocked": {
-      "baseUrl": "https://www.thredup.com",
-      "productUrl": "https://www.thredup.com/handbags?department_tags=handbags",
-      "type": "playwright",
-      "actions": [
-        { "name": "goToProduct", "selectors": ["a[data-inp-label=\"link-item-card\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Go to first product page..." },
-        { "name": "addToCart", "selectors": ["button:has-text(\"Add to cart\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Adding product to cart..." },
-        { "name": "viewCart", "selectors": ["a[aria-label=\"Cart\"]"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛍️] Viewing cart..." },
-        { "name": "clearCoupon", "selectors": ["button[aria-label^=\"Remove promo code\"]"], "type": "click", "waitAfter": 5000, "required" : false, "event" : "[💳] Clear default coupon code..."  },
-        { "name": "enterCoupon", "selectors": ["input[id=\"promo\"]"], "type": "fill", "waitAfter": 5000, "required" : true, "event" : "[💳] Entering coupon code..."},
-        { "name": "checkCoupon", "selectors": ["button:has-text(\"Apply\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[✅] Checking coupon code..." }
-      ],
-      "waitTime": 3000,
-      "codeValidation": {
-        "element": "button[aria-label^=\"Remove promo code\"]",
-        "validText": "Remove promo code"
+      },
+      "requestParams": {
+        "applyCouponUrl":"https://api.modaoperandi.com/public/v3.5/cart",
+        "method": "PATCH"
       }
     },
     "carturesti.ro": {
@@ -66,6 +52,10 @@
         "actions": [
           { "name": "clearCoupon", "selectors": ["a.remove-voucher"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
         ]
+      },
+      "requestParams": {
+        "applyCouponUrl":"https://carturesti.ro/checkout",
+        "method": "POST"
       }
     },
     "myprotein.ro": {
@@ -90,6 +80,10 @@
         "actions": [
           { "name": "clearCoupon", "selectors": ["#promo-code-remove"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
         ]
+      },
+      "requestParams": {
+        "applyCouponUrl":"https://www.myprotein.ro/api/operation/ApplyPromocode/",
+        "method": "POST"
       }
     },
     "gymbeam.ro": {
@@ -115,6 +109,10 @@
         "actions": [
           { "name": "clearCoupon", "selectors": ["button:has-text(\"Eliminați\")"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
         ]
+      },
+      "requestParams": {
+        "applyCouponUrl":"https://gymbeam.ro/graphql?q=ApplyCouponToCart",
+        "method": "POST"
       }
     },
     "honest.com": {
@@ -138,6 +136,10 @@
         "actions": [
           { "name": "clearCoupon", "selectors": ["button.remove-coupon"], "type": "click", "waitAfter": 5000, "required" : true, "event" : "[🛒] Deleting coupon code..." }
         ]
+      },
+      "requestParams": {
+        "applyCouponUrl":"https://www.honest.com/on/demandware.store/Sites-honest-Site/default/Cart-AddCoupon",
+        "method": "GET"
       }
     }
   }

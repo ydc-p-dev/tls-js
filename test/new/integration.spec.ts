@@ -10,9 +10,6 @@ import {
 } from '../../src/lib';
 import * as Comlink from 'comlink';
 import { HTTPParser } from 'http-parser-js';
-import configData from '../../site-config/config.json';
-import * as Console from 'node:console';
-const config = configData;
 
 
 const { init, Prover, Presentation }: any = Comlink.wrap(
@@ -81,13 +78,11 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
   const targetDomain = getTargetDomain();
   console.log('TARGET_DOMAIN:', targetDomain || 'not provided');
 
-  const siteConfig = requestData ?? config.sites[targetDomain];
+  const siteConfig = requestData;
 
   if (!siteConfig) {
-    const availableDomains = Object.keys(config.sites).join(', ');
     throw new Error(
-      `❌ Configuration not found for domain: ${targetDomain}\n` +
-        `Available domains: ${availableDomains}`,
+      `❌ Configuration not found for domain: ${targetDomain}`
     );
   }
 
@@ -144,6 +139,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
 
   try {
     siteConfig = await getSiteConfig();
+
     console.log('SITE CONFIG', siteConfig)
   } catch (err: any) {
     console.error(err.message);
@@ -188,6 +184,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
       maxRecvData: siteConfig.maxRecvData,
       maxSentData: siteConfig.maxSentData,
       network: "Bandwidth",
+      timeout: 120000,
     })) as _Prover;
     console.log('✅ Prover created');
 
@@ -335,20 +332,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
 
     console.log('💾 Proof sent to server for saving');
 
-
-
-
-    // Збереження в файл
-    // const blob = new Blob([JSON.stringify(json, null, 2)], {
-    //   type: "application/json"
-    // });
-    // const url = URL.createObjectURL(blob);
-    // const a = document.createElement("a");
-    // a.href = url;
-    // a.download = fileName;
-    // a.click();
-    // console.log('💾 Proof saved to:', fileName);
-
     // Верифікація
     console.log('⏳ Verifying...');
     console.time('✅ Verification time');
@@ -360,20 +343,21 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
     console.log('   Server:', server_name);
     console.log('   Verifying Key:', verifyingKey);
 
-    // Відображення результату
-    const t = new Transcript({
-      sent: partialTranscript.sent,
-      recv: partialTranscript.recv,
-    });
-    const sentStr = t.sent();
-    const recvStr = t.recv();
+      // Відображення результату
+      const t = new Transcript({
+        sent: partialTranscript?.sent,
+        recv: partialTranscript?.recv,
+      });
+      const sentStr = t.sent();
+      const recvStr = t.recv();
 
-    console.log('\n📊 Results:');
-    console.log('═══════════════════════════════════════');
-    console.log('📤 Sent:\n', sentStr.substring(0, 500), sentStr.length > 500 ? '...' : '');
-    console.log('───────────────────────────────────────');
-    console.log('📥 Received:\n', recvStr.substring(0, 500), recvStr.length > 500 ? '...' : '');
-    console.log('═══════════════════════════════════════\n');
+      console.log('\n📊 Results:');
+      console.log('═══════════════════════════════════════');
+      console.log('📤 Sent:\n', sentStr.substring(0, 500), sentStr.length > 500 ? '...' : '');
+      console.log('───────────────────────────────────────');
+      console.log('📥 Received:\n', recvStr.substring(0, 500), recvStr.length > 500 ? '...' : '');
+      console.log('═══════════════════════════════════════\n');
+
 
     console.timeEnd('⏱️  Total time');
 
