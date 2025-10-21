@@ -174,7 +174,7 @@ async function validateCoupon(options) {
         const postData = request.postData();
         const headers = request.headers();
 
-        if (currentAction === 'checkCoupon' && url.startsWith(applyCouponUrl) && method === applyCouponMethod) {
+        if (currentAction === 'checkCoupon' && url.startsWith(applyCouponUrl) ) {
           applyCouponRequest = {
             domain,
             filename,
@@ -286,7 +286,7 @@ async function validateCoupon(options) {
         }
       }
 
-      await page.waitForTimeout(siteConfig.waitTime);
+      // await page.waitForTimeout(siteConfig.waitTime);
 
     } catch (err) {
       error(`❌ Unexpected error: ${err?.message}`);

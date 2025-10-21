@@ -32,6 +32,16 @@ interface RuntimeConfig {
   filename?: string;
 }
 
+interface MinimizeHeadersOptions {
+  keepUserAgent?: boolean;
+  keepAnalyticsCookies?: boolean;
+  keepSecurityHeaders?: boolean;
+}
+
+interface Headers {
+  [key: string]: string;
+}
+
 function extractDomainFromUrl(url: string): string {
   try {
     const urlObj = new URL(url);
@@ -101,21 +111,37 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     console.log('NO REQUEST DATA. siteConfig SELECTED')
   }
 
+  const headers = minimizeHeaders(siteConfig.headers, {
+    keepUserAgent: true,
+    keepAnalyticsCookies: false
+  });
+
+  // const headers = siteConfig.headers;
+
   let method = 'POST';
   const allowedMethods = ['GET', 'POST', 'PUT', 'DELETE'];
   if (siteConfig?.method && allowedMethods.includes(siteConfig.method)) {
     method = siteConfig.method;
+  } else {
+    method = 'POST';
+    headers['x-http-method-override'] = siteConfig.method;
+  }
+
+  let body = null;
+
+  if (method === 'POST' && (headers['Content-Type']?.startsWith('text/plain') || headers['content-type']?.startsWith('text/plain'))) {
+    body = JSON.stringify(siteConfig.payload);
+  } else {
+    body = siteConfig.payload;
   }
 
   return {
     domain: domain,
     url: siteConfig.applyCouponUrl,
     method,
-    body: requestData ? JSON.parse(siteConfig.payload) : siteConfig.payload,
-    headers: siteConfig.headers || {
-      'content-type': 'application/json',
-    },
-    cookies: siteConfig?.cookies || '',
+    body,
+    headers,
+    cookies: siteConfig?.cookies ?? '',
     notaryUrl: defaults.notaryUrl!,
     proxyUrl: defaults.proxyUrl!,
     maxSentData: defaults.maxSentData!,
@@ -124,23 +150,13 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
   };
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T> {
-  return new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error(label)), ms);
-    p.then(
-      v => { clearTimeout(t); res(v); },
-      e => { clearTimeout(t); rej(e); }
-    );
-  });
-}
-
 (async function () {
   let siteConfig: RuntimeConfig;
 
   try {
     siteConfig = await getSiteConfig();
 
-    console.log('SITE CONFIG', siteConfig)
+    // console.log('SITE CONFIG', siteConfig)
   } catch (err: any) {
     console.error(err.message);
     // @ts-ignore
@@ -184,7 +200,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
       maxRecvData: siteConfig.maxRecvData,
       maxSentData: siteConfig.maxSentData,
       network: "Bandwidth",
-      timeout: 120000,
     })) as _Prover;
     console.log('✅ Prover created');
 
@@ -210,10 +225,12 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
     };
 
     // Додаємо body тільки якщо не GET
-    if (siteConfig.method !== 'GET' && siteConfig.body) {
-      requestOptions.body = siteConfig.body;
-      console.log('   Body:', JSON.stringify(siteConfig.body).substring(0, 100) + '...');
+    if (siteConfig?.method !== 'GET' && siteConfig?.body) {
+      requestOptions.body = JSON.stringify(siteConfig.body);
+      // console.log('   Body:', JSON.stringify(siteConfig.body).substring(0, 100) + '...');
     }
+
+    console.log(' ✅  requestOptions:', requestOptions.body);
 
     await prover.sendRequest(siteConfig.proxyUrl, requestOptions);
     console.log('✅ Request sent');
@@ -225,6 +242,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
     const { sent, recv } = transcript;
     console.log('✅ Transcript received');
     console.log('   📤 Sent:', sent.length, 'bytes');
+    console.log('   📤 Transcript Sent:', sent);
     console.log('   📥 Received:', recv.length, 'bytes');
 
     // Парсинг HTTP відповіді
@@ -242,11 +260,11 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
       try {
         parsedBody = JSON.parse(recvBody[0]?.toString());
         console.log('✅ JSON body parsed');
-        console.log('   Response preview:', JSON.stringify(parsedBody).substring(0, 200) + '...');
+        console.log('   Response preview:', JSON.stringify(parsedBody).substring(0, 400) + '...');
       } catch (err) {
         console.log('ℹ️  Response is not JSON');
         parsedBody = recvBody[0]?.toString();
-        console.log('   Response preview:', parsedBody.substring(0, 200) + '...');
+        console.log('   Response preview:', parsedBody.substring(0, 400) + '...');
       }
     }
 
@@ -327,7 +345,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Promise<T
         data: json,
       }),
     }).then(res => res.json())
-      .then(res => console.log('💾 SERVER response:', res))
+      .then(res => console.log('💾 SAVE-PROOF response:', res))
       .catch(err => console.error('❌ Failed to save proof on server:', err));
 
     console.log('💾 Proof sent to server for saving');
@@ -440,5 +458,169 @@ function parseHttpMessage(buffer: Buffer, type: 'request' | 'response') {
     info: buffer.toString('utf-8').split('\r\n')[0] + '\r\n',
     headers,
     body,
+  };
+}
+
+function minimizeHeaders(
+  headers: Headers,
+  options: MinimizeHeadersOptions = {}
+): Headers {
+  const {
+    keepUserAgent = true,
+    keepAnalyticsCookies = false,
+    keepSecurityHeaders = false
+  } = options;
+
+  // Критичні заголовки (завжди зберігаємо)
+  const criticalHeaders: readonly string[] = [
+    'host',
+    'cookie',
+    'referer',
+    'x-requested-with',
+    'content-type',
+    'content-length',
+    'origin'
+  ];
+
+  // Заголовки для видалення
+  const headersToRemove: readonly string[] = [
+    'accept',
+    'accept-language',
+    'accept-encoding',
+    'connection',
+    'alt-used',
+    'sec-fetch-dest',
+    'sec-fetch-mode',
+    'sec-fetch-site'
+  ];
+
+  // Analytics cookies для видалення
+  const analyticsCookiePrefixes: readonly string[] = [
+    '_ga',
+    '_gcl_au',
+    '_fbp',
+    '_uetsid',
+    '_uetvid',
+    '_scid',
+    '_sctr',
+    '__attentive',
+    '_vwo',
+    '_vis_opt',
+    'OptanonConsent',
+    'OptanonAlertBoxClosed',
+    '_tt_',
+    'ttcsid',
+    '_pin_unauth',
+    '__kla_id',
+    '_derived_epik',
+    '__attn',
+    'BVBRANDID',
+    'BVBRANDSID',
+    'FPC',
+    'og_session_id',
+    '_hjSession',
+    '_hjSessionUser',
+    '__cq_seg',
+    '__cq_dnt',
+    'dw_dnt',
+    'og_autoship',
+    'actualOptanonConsent',
+    '_cq_duid',
+    '_cq_suid',
+    'FPID',
+    'FPLC',
+    'FPGSID',
+    'gaVisitId'
+  ];
+
+  const minimized: Headers = {};
+
+  // Копіюємо заголовки
+  for (const [key, value] of Object.entries(headers)) {
+    const lowerKey = key.toLowerCase();
+
+    // Пропускаємо непотрібні заголовки
+    if (headersToRemove.includes(lowerKey)) {
+      continue;
+    }
+
+    // User-Agent (опціонально)
+    if (lowerKey === 'user-agent' && !keepUserAgent) {
+      continue;
+    }
+
+    // Security headers (опціонально)
+    if (!keepSecurityHeaders && lowerKey.startsWith('sec-')) {
+      continue;
+    }
+
+    // Обробка cookies
+    if (lowerKey === 'cookie' && !keepAnalyticsCookies) {
+      minimized[key] = minimizeCookies(value, analyticsCookiePrefixes);
+    } else {
+      minimized[key] = value;
+    }
+  }
+
+  return minimized;
+}
+
+/**
+ * Фільтрує analytics cookies з cookie string
+ */
+function minimizeCookies(
+  cookieString: string,
+  prefixesToRemove: readonly string[]
+): string {
+  const cookies = cookieString.split('; ');
+
+  const filtered = cookies.filter((cookie: string) => {
+    const cookieName = cookie.split('=')[0];
+
+    // Перевіряємо чи cookie не починається з analytics префіксів
+    return !prefixesToRemove.some((prefix: string) =>
+      cookieName.startsWith(prefix)
+    );
+  });
+
+  return filtered.join('; ');
+}
+
+/**
+ * Підраховує кількість cookies в cookie string
+ */
+function countCookies(cookieString: string): number {
+  if (!cookieString || cookieString.trim() === '') {
+    return 0;
+  }
+  return cookieString.split('; ').length;
+}
+
+/**
+ * Показує статистику мінімізації
+ */
+interface MinimizationStats {
+  originalHeaders: number;
+  minimizedHeaders: number;
+  originalCookies: number;
+  minimizedCookies: number;
+  removedHeaders: number;
+  removedCookies: number;
+}
+
+function getMinimizationStats(
+  original: Headers,
+  minimized: Headers
+): MinimizationStats {
+  const originalCookies = countCookies(original.cookie || '');
+  const minimizedCookies = countCookies(minimized.cookie || '');
+
+  return {
+    originalHeaders: Object.keys(original).length,
+    minimizedHeaders: Object.keys(minimized).length,
+    originalCookies,
+    minimizedCookies,
+    removedHeaders: Object.keys(original).length - Object.keys(minimized).length,
+    removedCookies: originalCookies - minimizedCookies
   };
 }

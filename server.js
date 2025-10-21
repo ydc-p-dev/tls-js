@@ -165,7 +165,21 @@ app.post('/api/validate-coupon', async (req, res) => {
 
     if (customActions) {
       const tempRequestFilePath = `output/temp/actions.json`;
-      await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
+      if(customActions.baseUrl
+        && customActions.productUrl
+        && customActions.type
+        && customActions?.actions?.length
+        && customActions?.waitTime
+        && customActions?.codeValidation
+        && customActions?.clearCoupon
+        && customActions?.requestParams) {
+        await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid custom actions format'
+        });
+      }
     }
 
     console.log('\n🚀 API: Full Flow - Validation → Notarization');

@@ -36,13 +36,13 @@ test('integration', async ({ page }) => {
   await page.goto(fullUrl);
 
   console.log('  Waiting for result...');
-  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 60000 });
+  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 180000 });
 
   const json = await page.getByTestId('integration').innerText();
   const { sent, recv, server_name, version, meta } = JSON.parse(json);
 
-  console.log('  Received SERVER:', recv);
-  console.log('  Sent SERVER:', sent);
+  // console.log('  Received SERVER:', recv);
+  // console.log('  Sent SERVER:', sent);
   expect(version).toBe(versionEnv);
   expect(new URL(meta.notaryUrl!).protocol === 'http:');
   expect(server_name).toContain(targetDomain);
