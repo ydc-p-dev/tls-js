@@ -98,8 +98,8 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
   const domain = extractDomainFromUrl(siteConfig.applyCouponUrl);
   const defaults = {
-    // notaryUrl: 'http://127.0.0.1:7047',
-    notaryUrl: 'http://notary-server:7047',
+    notaryUrl: 'http://127.0.0.1:7047',
+    // notaryUrl: 'http://notary-server:7047',
     proxyUrl: 'ws://127.0.0.1:55688',
     maxSentData: 4096,
     maxRecvData: 16384,
@@ -199,7 +199,7 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
       serverDns: siteConfig.domain,
       maxRecvData: siteConfig.maxRecvData,
       maxSentData: siteConfig.maxSentData,
-      network: "Bandwidth",
+      network: "Latency",
     })) as _Prover;
     console.log('✅ Prover created');
 

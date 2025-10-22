@@ -1,5 +1,5 @@
 // coupon/validate.js
-const { webkit } = require('playwright');
+const { chromium } = require('playwright');
 const fs = require('fs');
 const actions = require('../site-config/actions.json');
 
@@ -138,7 +138,7 @@ async function validateCoupon(options) {
     log('[⏳] Starting headless-browser...');
     let browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
 
-    browser = await webkit.launch({
+    browser = await chromium.launch({
       headless: browserHeadless
     });
 
