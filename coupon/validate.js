@@ -1,5 +1,5 @@
 // coupon/validate.js
-const { chromium } = require('playwright');
+const { webkit } = require('playwright');
 const fs = require('fs');
 const actions = require('../site-config/actions.json');
 
@@ -25,12 +25,13 @@ async function validateCoupon(options) {
   const startTime = Date.now();
 
   let logs = [];
-  let page;
+  // let page;
   let currentAction;
   let applyCouponUrl;
   let applyCouponRequest;
   let applyCouponMethod;
-  let browser;
+  // let browser;
+
 
   const log = (message) => {
     console.log(message);
@@ -113,6 +114,10 @@ async function validateCoupon(options) {
     }
   }
 
+  const browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
+
+  const { browser, browserCtx, page } = await setupWebKitBrowser(browserHeadless);
+
   try {
     const {coupon, domain, productUrl, filename, customActions} = options;
 
@@ -136,21 +141,22 @@ async function validateCoupon(options) {
     }
 
     log('[⏳] Starting headless-browser...');
-    let browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
+    // let browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
+    //
+    // browser = await webkit.launch({
+    //   headless: browserHeadless
+    // });
+    //
+    // const browserCtx = await browser.newContext({
+    //   locale: 'en-US',
+    //   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.188 Safari/537.36',
+    // });
+    //
+    // page = await browserCtx.newPage();
 
-    browser = await chromium.launch({
-      headless: browserHeadless
-    });
-
-    const browserCtx = await browser.newContext({
-      locale: 'en-US',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.188 Safari/537.36',
-    });
-
-    page = await browserCtx.newPage();
 
     await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', {get: () => false});
+      Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
       window.navigator.chrome = {runtime: {}};
       Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
       Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
@@ -358,6 +364,103 @@ async function validateCoupon(options) {
       await browser.close();
     }
   }
+}
+
+async function setupWebKitBrowser(browserHeadless = true) {
+  const browser = await webkit.launch({
+    headless: browserHeadless
+  });
+
+  const browserCtx = await browser.newContext({
+    locale: 'en-US',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    viewport: { width: 1920, height: 1080 },
+    deviceScaleFactor: 2,
+    isMobile: false,
+    hasTouch: false,
+    colorScheme: 'light',
+    timezoneId: 'America/New_York', // Adjust to your needs
+  });
+
+  const page = await browserCtx.newPage();
+
+  await page.addInitScript(() => {
+    // Remove webdriver property
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => undefined
+    });
+
+    // Realistic Safari languages
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en']
+    });
+
+    // Safari plugins (Safari has minimal plugins)
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => ({
+        length: 0,
+        item: () => null,
+        namedItem: () => null,
+        refresh: () => {}
+      })
+    });
+
+    // Add Safari-specific properties
+    Object.defineProperty(navigator, 'vendor', {
+      get: () => 'Apple Computer, Inc.'
+    });
+
+    // Platform consistency
+    Object.defineProperty(navigator, 'platform', {
+      get: () => 'MacIntel'
+    });
+
+    // Hardware concurrency (typical Mac value)
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+      get: () => 8
+    });
+
+    // Memory (Safari reports this)
+    Object.defineProperty(navigator, 'deviceMemory', {
+      get: () => 8
+    });
+
+    // Fix permissions API
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+      parameters.name === 'notifications' ?
+        Promise.resolve({ state: Notification.permission }) :
+        originalQuery(parameters)
+    );
+
+    // Canvas fingerprint noise (optional)
+    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function(type) {
+      if (type === 'image/png' && this.width > 0) {
+        const context = this.getContext('2d');
+        const imageData = context.getImageData(0, 0, this.width, this.height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          imageData.data[i] += Math.floor(Math.random() * 3) - 1;
+        }
+        context.putImageData(imageData, 0, 0);
+      }
+      return originalToDataURL.apply(this, arguments);
+    };
+
+    // WebGL vendor masking
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+      if (parameter === 37445) {
+        return 'Intel Inc.';
+      }
+      if (parameter === 37446) {
+        return 'Intel Iris OpenGL Engine';
+      }
+      return getParameter.apply(this, arguments);
+    };
+  });
+
+  return { browser, browserCtx, page };
 }
 
 // Експорт

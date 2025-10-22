@@ -88,9 +88,14 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'chromium',
+      name: 'webkit',
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices['Desktop Safari'],
+        viewport: { width: 1280, height: 720 },
+        ignoreHTTPSErrors: true,
+        launchOptions: {
+          args: ['--disable-web-security'],
+        },
       },
     },
   ],

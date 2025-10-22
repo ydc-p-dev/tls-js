@@ -112,7 +112,7 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
   }
 
   const headers = minimizeHeaders(siteConfig.headers, {
-    keepUserAgent: true,
+    keepUserAgent: false,
     keepAnalyticsCookies: false
   });
 
