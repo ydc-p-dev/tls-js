@@ -246,7 +246,7 @@ async function validateCoupon(options) {
           } else {
             try {
               if (action.type === 'goto') {
-                await page.goto(action.url, { waitUntil: 'networkidle' });
+                await page.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
               }
             } catch (er) {
               error(`[⚠️] Failed action "${action.name}": ${er?.message}`);
