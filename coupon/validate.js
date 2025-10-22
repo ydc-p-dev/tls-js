@@ -1,5 +1,5 @@
 // coupon/validate.js
-const { firefox } = require('playwright');
+const { webkit } = require('playwright');
 const fs = require('fs');
 const actions = require('../site-config/actions.json');
 
@@ -138,7 +138,7 @@ async function validateCoupon(options) {
     log('[⏳] Starting headless-browser...');
     let browserHeadless = process.env.BROWSER_HEADLESS ? process.env.BROWSER_HEADLESS === 'true' : true;
 
-    browser = await firefox.launch({
+    browser = await webkit.launch({
       headless: browserHeadless
     });
 
@@ -168,23 +168,41 @@ async function validateCoupon(options) {
       });
       await page.waitForTimeout(siteConfig.waitTime);
 
-      page.on('request', request => {
+      page.on('request', async request => {
         const url = request.url();
         const method = request.method();
         const postData = request.postData();
         const headers = request.headers();
 
-        if (currentAction === 'checkCoupon' && url.startsWith(applyCouponUrl) ) {
+
+        if (currentAction === 'checkCoupon'
+          && url.startsWith(applyCouponUrl)
+          && method === applyCouponMethod
+          && !applyCouponRequest
+        ) {
+          const cookies = await browserCtx.cookies();
+
+          // Конвертуємо в Cookie header string
+          const cookieString = cookies
+            .map(cookie => `${cookie.name}=${cookie.value}`)
+            .join('; ');
+
+          // Додаємо cookie до headers
+          const fullHeaders = {
+            ...headers,
+            cookie: cookieString  // ✅ Додаємо вручну
+          };
+
           applyCouponRequest = {
             domain,
             filename,
             applyCouponUrl: url,
             method,
-            headers,
+            headers: fullHeaders,  // ✅ З cookies!
             payload: postData,
             timestamp: new Date().toISOString()
           };
-          // console.log("APPLY COUPON REQUEST",applyCouponRequest);
+          console.log("APPLY COUPON REQUEST",applyCouponRequest);
         }
       });
 
