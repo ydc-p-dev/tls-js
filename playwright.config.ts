@@ -93,9 +93,6 @@ export default defineConfig({
         ...devices['Desktop Safari'],
         viewport: { width: 1280, height: 720 },
         ignoreHTTPSErrors: true,
-        launchOptions: {
-          args: ['--disable-web-security'],
-        },
       },
     },
   ],
