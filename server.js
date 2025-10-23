@@ -22,7 +22,7 @@ app.use(express.json({ limit: '50mb' }));
 // --- 🕒 Таймаут запиту: 3 хвилини (180 000 мс)
 app.use((req, res, next) => {
   // Встановлюємо таймаут на відповідь
-  res.setTimeout(180000, () => {
+  res.setTimeout(200000, () => {
     console.error(`⏰ Request timed out: ${req.method} ${req.originalUrl}`);
     if (!res.headersSent) {
       res.status(503).json({

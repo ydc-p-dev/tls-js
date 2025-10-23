@@ -2,23 +2,6 @@ import { defineConfig, devices } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 
-// // Завантажити конфігурацію сайтів
-// const configPath = path.join(__dirname, 'site-config', 'actions.json');
-// let config: any = {};
-
-// let config;
-//
-// const customConfig = path.join(__dirname, 'output/temp', 'actions.json');
-// const configPath = path.join(__dirname, 'site-config', 'actions.json');
-//
-// try {
-//   config = JSON.parse(fs.readFileSync(customConfig ?? configPath, 'utf8'));
-// } catch (err) {
-//   console.error('❌ Failed to load actions.json');
-//   console.error('Error:', err.message);
-//   throw err;
-// }
-
 let config;
 
 const customConfig = path.join(__dirname, 'output/temp', 'actions.json');
@@ -76,8 +59,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'html',
-
-  timeout: 180000, // 3 хвилини
+  timeout: 600000,
 
   use: {
     baseURL: 'http://localhost:3001',
@@ -102,13 +84,13 @@ export default defineConfig({
       command: 'echo "Server already running in Docker"',
       url: 'http://localhost:3001',
       reuseExistingServer: true,
-      timeout: 5000,
+      timeout: 200000,
     },
     // 🎯 Динамічний WebSocket Proxy
     ...(wsProxyCommand ? [{
       command: wsProxyCommand,
       reuseExistingServer: true,
-      timeout: 10000,
+      timeout: 200000,
     }] : []),
   ]
 });

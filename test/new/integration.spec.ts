@@ -111,7 +111,7 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     console.log('NO REQUEST DATA. siteConfig SELECTED')
   }
 
-  const headers = minimizeHeaders(siteConfig.headers, {
+  const headers = minimizeHeaders(siteConfig.headers, siteConfig?.bodyFormat, {
     keepUserAgent: false,
     keepAnalyticsCookies: false
   });
@@ -129,7 +129,14 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
   let body = null;
 
-  if (method === 'POST' && (headers['Content-Type']?.startsWith('text/plain') || headers['content-type']?.startsWith('text/plain'))) {
+  if (siteConfig?.requestParams?.bodyFormat === 'json'
+    && typeof siteConfig.payload === 'string') {
+    body = JSON.parse(siteConfig.payload);
+  }
+  else if (method === 'POST' && typeof siteConfig.payload !== 'string'
+        && (headers['Content-Type']?.startsWith('text/plain')
+        || headers['content-type']?.startsWith('text/plain')))
+  {
     body = JSON.stringify(siteConfig.payload);
   } else {
     body = siteConfig.payload;
@@ -190,8 +197,8 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     await init({ loggingLevel: 'Debug' });
     console.log('✅ WASM initialized');
 
-    console.time('⏱️  Total time');
-    console.time('🔧 Setup time');
+    // console.time('⏱️  Total time');
+    // console.time('🔧 Setup time');
 
     // Створення Prover
     console.log('⏳ Creating Prover...');
@@ -200,6 +207,7 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
       maxRecvData: siteConfig.maxRecvData,
       maxSentData: siteConfig.maxSentData,
       network: "Latency",
+      timeout: 600000,
     })) as _Prover;
     console.log('✅ Prover created');
 
@@ -208,15 +216,15 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     const notary = NotaryServer.from(siteConfig.notaryUrl);
     const sessionUrl = await notary.sessionUrl();
     await prover.setup(sessionUrl);
-    console.log('✅ Connected to Notary');
+    // console.log('✅ Connected to Notary');
 
-    console.timeEnd('🔧 Setup time');
+    // console.timeEnd('🔧 Setup time');
 
     // Відправка запиту
     console.log('⏳ Sending request...');
     console.log('   URL:', siteConfig.url);
     console.log('   Method:', siteConfig.method);
-    console.time('🌐 Request time');
+    // console.time('🌐 Request time');
 
     const requestOptions: any = {
       url: siteConfig.url,
@@ -226,15 +234,28 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
     // Додаємо body тільки якщо не GET
     if (siteConfig?.method !== 'GET' && siteConfig?.body) {
-      requestOptions.body = JSON.stringify(siteConfig.body);
-      // console.log('   Body:', JSON.stringify(siteConfig.body).substring(0, 100) + '...');
+      // requestOptions.body = JSON.parse(siteConfig.body);
+      let sendBody = {};
+
+      try {
+        sendBody = JSON.parse(siteConfig.body);
+        console.log('REQUEST sendBody obj:', sendBody);
+      } catch (err) {
+        sendBody = JSON.stringify(siteConfig.body);
+        console.log('REQUEST sendBody str:', sendBody);
+      }
+
+      requestOptions.body = sendBody;
+
+      // console.log('   Body REQUEST:', requestOptions.body);
     }
 
-    console.log(' ✅  requestOptions:', requestOptions.body);
+    // console.log(' ✅  requestOptions:', requestOptions);
+    // console.log(' ✅  requestOptions headers:', requestOptions.headers);
 
     await prover.sendRequest(siteConfig.proxyUrl, requestOptions);
     console.log('✅ Request sent');
-    console.timeEnd('🌐 Request time');
+    // console.timeEnd('🌐 Request time');
 
     // Отримання transcript
     console.log('⏳ Getting transcript...');
@@ -242,29 +263,28 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     const { sent, recv } = transcript;
     console.log('✅ Transcript received');
     console.log('   📤 Sent:', sent.length, 'bytes');
-    console.log('   📤 Transcript Sent:', sent);
     console.log('   📥 Received:', recv.length, 'bytes');
 
     // Парсинг HTTP відповіді
-    console.log('⏳ Parsing response...');
+    // console.log('⏳ Parsing response...');
     const {
       info: recvInfo,
       headers: recvHeaders,
       body: recvBody,
     } = parseHttpMessage(Buffer.from(recv), 'response');
     console.log('✅ Response parsed');
-    console.log('   Status:', recvInfo.trim());
+    // console.log('   Status:', recvInfo.trim());
     let parsedBody = null;
     // Спроба парсити JSON body
     if (recvBody && recvBody[0]) {
       try {
         parsedBody = JSON.parse(recvBody[0]?.toString());
         console.log('✅ JSON body parsed');
-        console.log('   Response preview:', JSON.stringify(parsedBody).substring(0, 400) + '...');
+        // console.log('   Response preview:', JSON.stringify(parsedBody).substring(0, 400) + '...');
       } catch (err) {
         console.log('ℹ️  Response is not JSON');
         parsedBody = recvBody[0]?.toString();
-        console.log('   Response preview:', parsedBody.substring(0, 400) + '...');
+        // console.log('   Response preview:', parsedBody.substring(0, 400) + '...');
       }
     }
 
@@ -300,9 +320,9 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
     // Нотаризація
     console.log('⏳ Notarizing...');
-    console.time('🔐 Notarization time');
+    // console.time('🔐 Notarization time');
     const notarizationOutput = await prover.notarize(commit);
-    console.timeEnd('🔐 Notarization time');
+    // console.timeEnd('🔐 Notarization time');
     console.log('✅ Notarization complete');
 
     // Створення Presentation
@@ -323,17 +343,22 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
 
     // Серіалізація
     const serialized = await presentation.serialize();
-    console.log('📦 Serialized size:', serialized.length, 'bytes');
+    // console.log('📦 Serialized size:', serialized.length, 'bytes');
 
     // Експорт JSON
     const json = await presentation.json();
 
 
     //Генеруємо ім'я файлу
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const domainKey = process.env.TARGET_DOMAIN || siteConfig.domain;
-    const fileName = `${siteConfig.filename}.json` || `proof_${domainKey}_${timestamp}.json`;
 
+    let fileName;
+    if (!siteConfig?.filename) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const domainKey = process.env.TARGET_DOMAIN || siteConfig.domain;
+      fileName = `proof_${domainKey}_${timestamp}.json`;
+    } else {
+      fileName = `${siteConfig.filename}.json`
+    }
 //Відправка на сервер
     await fetch('http://localhost:3001/api/save-proof', {
       method: 'POST',
@@ -344,22 +369,23 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
         filename: fileName,
         data: json,
       }),
-    }).then(res => res.json())
-      .then(res => console.log('💾 SAVE-PROOF response:', res))
-      .catch(err => console.error('❌ Failed to save proof on server:', err));
+    });
+      // .then(res => res.json())
+      // .then(res => console.log('💾 SAVE-PROOF response:', res))
+      // .catch(err => console.error('❌ Failed to save proof on server:', err));
 
     console.log('💾 Proof sent to server for saving');
 
     // Верифікація
     console.log('⏳ Verifying...');
-    console.time('✅ Verification time');
+    // console.time('✅ Verification time');
     const { transcript: partialTranscript, server_name } =
       await presentation.verify();
     const verifyingKey = await presentation.verifyingKey();
-    console.timeEnd('✅ Verification time');
+    // console.timeEnd('✅ Verification time');
     console.log('✅ Verification successful');
-    console.log('   Server:', server_name);
-    console.log('   Verifying Key:', verifyingKey);
+    // console.log('   Server:', server_name);
+    // console.log('   Verifying Key:', verifyingKey);
 
       // Відображення результату
       const t = new Transcript({
@@ -377,7 +403,7 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
       console.log('═══════════════════════════════════════\n');
 
 
-    console.timeEnd('⏱️  Total time');
+    // console.timeEnd('⏱️  Total time');
 
     // Відобразити на сторінці
     // @ts-ignore
@@ -463,6 +489,7 @@ function parseHttpMessage(buffer: Buffer, type: 'request' | 'response') {
 
 function minimizeHeaders(
   headers: Headers,
+  bodyFormat: 'json' | 'form' | 'text' = 'text',
   options: MinimizeHeadersOptions = {}
 ): Headers {
   const {
@@ -470,6 +497,8 @@ function minimizeHeaders(
     keepAnalyticsCookies = false,
     keepSecurityHeaders = false
   } = options;
+
+  console.log('minimizeHeaders bodyFormat', bodyFormat);
 
   // Критичні заголовки (завжди зберігаємо)
   const criticalHeaders: readonly string[] = [
@@ -538,6 +567,12 @@ function minimizeHeaders(
   // Копіюємо заголовки
   for (const [key, value] of Object.entries(headers)) {
     const lowerKey = key.toLowerCase();
+
+    // Виправляємо формат
+    if (lowerKey === 'content-type' && bodyFormat === 'json') {
+      minimized[key] = 'application/json';
+      continue;
+    }
 
     // Пропускаємо непотрібні заголовки
     if (headersToRemove.includes(lowerKey)) {

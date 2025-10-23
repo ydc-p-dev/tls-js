@@ -199,6 +199,8 @@ async function validateCoupon(options) {
             cookie: cookieString  // ✅ Додаємо вручну
           };
 
+
+
           applyCouponRequest = {
             domain,
             filename,
@@ -208,6 +210,9 @@ async function validateCoupon(options) {
             payload: postData,
             timestamp: new Date().toISOString()
           };
+          if(actions?.sites[domain]?.requestParams?.bodyFormat) {
+            applyCouponRequest.bodyFormat = actions.sites[domain].requestParams.bodyFormat
+          }
           console.log("APPLY COUPON REQUEST",applyCouponRequest);
         }
       });

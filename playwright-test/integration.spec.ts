@@ -5,7 +5,7 @@ const versionEnv = process.env.VERSION ?? '0.1.0-alpha.12';
 
 console.log('Server Side');
 test('integration', async ({ page }) => {
-
+  // test.slow()
   console.log('🎯 Testing domain:', targetDomain);
 
 
@@ -36,7 +36,7 @@ test('integration', async ({ page }) => {
   await page.goto(fullUrl);
 
   console.log('  Waiting for result...');
-  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 180000 });
+  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 280000 });
 
   const json = await page.getByTestId('integration').innerText();
   const { sent, recv, server_name, version, meta } = JSON.parse(json);

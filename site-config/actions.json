@@ -83,7 +83,8 @@
       },
       "requestParams": {
         "applyCouponUrl":"https://www.myprotein.ro/api/operation/ApplyPromocode/",
-        "method": "POST"
+        "method": "POST",
+        "bodyFormat": "json"
       }
     },
     "gymbeam.ro": {
