@@ -101,6 +101,9 @@ async function getSiteConfig(): Promise<RuntimeConfig> {
     // notaryUrl: 'http://127.0.0.1:7047',
     notaryUrl: 'http://notary-server:7047',
     proxyUrl: 'ws://127.0.0.1:55688',
+    // maxSentData: 16384,
+    // maxRecvData: 32768,
+    // timeout: 36000
     maxSentData: 4096,
     maxRecvData: 16384,
   };

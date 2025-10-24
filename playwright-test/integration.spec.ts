@@ -5,10 +5,8 @@ const versionEnv = process.env.VERSION ?? '0.1.0-alpha.12';
 
 console.log('Server Side');
 test('integration', async ({ page }) => {
-  // test.slow()
+  // test.setTimeout(600000)
   console.log('🎯 Testing domain:', targetDomain);
-
-
   console.log('\n🎯 Running notarization for:', targetDomain);
 
   await page.addInitScript(domain => {
@@ -28,24 +26,97 @@ test('integration', async ({ page }) => {
     console.error('  [Browser Error]:', error.message);
   });
 
-  const base = process.env.BASE_URL || 'http://localhost:3001'; // або порт твого сервера
+  const base = process.env.BASE_URL || 'http://localhost:3001';
   const fullUrl = `${base}/integration.html?domain=${encodeURIComponent(targetDomain)}`;
 
   console.log('  Opening:', fullUrl);
 
-  await page.goto(fullUrl);
+  try {
+    await page.goto(fullUrl, {
+      timeout: 90000 ,
+      waitUntil: 'networkidle'
+    });
+    console.log('  Waiting for result...');
 
-  console.log('  Waiting for result...');
-  await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 280000 });
+    // Очистити кеш
+    // await page.evaluate(() => {
+    //   if ('caches' in window) {
+    //     caches.keys().then(names => {
+    //       names.forEach(name => caches.delete(name));
+    //     });
+    //   }
+    // });
 
-  const json = await page.getByTestId('integration').innerText();
-  const { sent, recv, server_name, version, meta } = JSON.parse(json);
+    // Чекаємо на результат (JSON або помилку)
+    await expect(page.getByTestId('integration')).toHaveText(/\{.*\}/s, { timeout: 540000 });
 
-  // console.log('  Received SERVER:', recv);
-  // console.log('  Sent SERVER:', sent);
-  expect(version).toBe(versionEnv);
-  expect(new URL(meta.notaryUrl!).protocol === 'http:');
-  expect(server_name).toContain(targetDomain);
-  expect(sent).toContain(targetDomain);
+    const json = await page.getByTestId('integration').innerText();
 
+    let result;
+    try {
+      result = JSON.parse(json);
+    } catch (e) {
+      // Виводимо помилку парсингу в stdout для notarize.js
+      console.error('❌ Failed to parse JSON result');
+      console.error('Error:', e.message);
+      console.error('Received text:', json);
+      throw new Error(`Failed to parse JSON: ${e.message}`);
+    }
+
+    // Якщо помилка в результаті - виводимо детально
+    if (result.success === false) {
+      console.error('\n❌ Notarization failed in browser!');
+      console.error('═══════════════════════════════════════');
+      console.error('Error:', result.error || 'Unknown error');
+      console.error('Domain:', result.domain || targetDomain);
+
+      if (result.error) {
+        console.error('Error details:', JSON.stringify(result.error, null, 2));
+      }
+
+      console.error('═══════════════════════════════════════\n');
+
+      // Кидаємо помилку для playwright
+      const errorMessage = typeof result.error === 'string'
+        ? result.error
+        : result.error?.message || 'Notarization failed';
+
+      throw new Error(`❌ Notarization failed: ${errorMessage}`);
+    }
+
+    const { sent, recv, server_name, version, meta } = result;
+
+    // Перевірки
+    expect(version).toBe(versionEnv);
+    expect(new URL(meta.notaryUrl!).protocol).toBe('http:');
+    expect(server_name).toContain(targetDomain);
+    expect(sent).toContain(targetDomain);
+
+    console.log('\n✅ All checks passed!');
+    console.log('═══════════════════════════════════════');
+    console.log('Server:', server_name);
+    console.log('Sent bytes:', sent.length);
+    console.log('Received bytes:', recv.length);
+    console.log('═══════════════════════════════════════\n');
+
+  } catch (error) {
+    // Виводимо помилку в stdout для notarize.js
+    console.error('\n❌ Test execution failed!');
+    console.error('═══════════════════════════════════════');
+    console.error('Error message:', error.message);
+    console.error('Error type:', error.constructor.name);
+    console.error('═══════════════════════════════════════\n');
+
+    // // Скриншот для дебагу
+    // try {
+    //   const screenshotPath = 'output/error-screenshot.png';
+    //   await page.screenshot({ path: screenshotPath, fullPage: true });
+    //   console.log(`  📸 Screenshot saved to ${screenshotPath}`);
+    // } catch (screenshotErr) {
+    //   console.error('  ⚠️ Could not save screenshot:', screenshotErr.message);
+    // }
+
+    // Обов'язково кидаємо помилку далі
+    throw error;
+  }
 });

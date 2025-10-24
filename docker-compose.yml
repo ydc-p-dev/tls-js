@@ -6,6 +6,9 @@ services:
     container_name: notary-server
     ports:
       - "7047:7047"
+    volumes:
+      - ./notary-config.yaml:/config.yaml:ro
+    command: [ "--config", "/config.yaml" ]
     networks:
       - tls-network
     restart: unless-stopped

@@ -20,19 +20,19 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 
 // --- 🕒 Таймаут запиту: 3 хвилини (180 000 мс)
-app.use((req, res, next) => {
-  // Встановлюємо таймаут на відповідь
-  res.setTimeout(200000, () => {
-    console.error(`⏰ Request timed out: ${req.method} ${req.originalUrl}`);
-    if (!res.headersSent) {
-      res.status(503).json({
-        success: false,
-        error: 'Request timed out (3 minutes limit reached)',
-      });
-    }
-  });
-  next();
-});
+// app.use((req, res, next) => {
+//   // Встановлюємо таймаут на відповідь
+//   res.setTimeout(200000, () => {
+//     console.error(`⏰ Request timed out: ${req.method} ${req.originalUrl}`);
+//     if (!res.headersSent) {
+//       res.status(503).json({
+//         success: false,
+//         error: 'Request timed out (3 minutes limit reached)',
+//       });
+//     }
+//   });
+//   next();
+// });
 
 // Створити директорію для proofs
 if (!fs.existsSync(PROOFS_DIR)) {
@@ -138,149 +138,328 @@ app.post('/api/save-proof', (req, res) => {
   }
 });
 
-// API для валідації і нотаризації
-app.post('/api/validate-coupon', async (req, res) => {
-  // Очистити temp файли
-  const tempRequestFilePath = path.join(__dirname, '.', 'output/temp/request.json');
-  const tempActionsFilePath = path.join(__dirname, '.', 'output/temp/actions.json');
-  if (fs.existsSync(tempRequestFilePath)) {
-    fs.unlinkSync(tempRequestFilePath);
-    console.log('🧹 Cleaned up temp request file');
-  }
-  if (fs.existsSync(tempActionsFilePath)) {
-    fs.unlinkSync(tempActionsFilePath);
-    console.log('🧹 Cleaned up temp actions file');
-  }
 
+app.post('/api/validate-coupon', async (req, res) => {
+  const TIME_LIMIT_MS = 240000;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('⏱️ Request timed out')), TIME_LIMIT_MS);
+  });
+
+  const mainLogic = (async () => {
+    // Очистити temp файли
+    const tempRequestFilePath = path.join(__dirname, '.', 'output/temp/request.json');
+    const tempActionsFilePath = path.join(__dirname, '.', 'output/temp/actions.json');
+    if (fs.existsSync(tempRequestFilePath)) {
+      fs.unlinkSync(tempRequestFilePath);
+      console.log('🧹 Cleaned up temp request file');
+    }
+    if (fs.existsSync(tempActionsFilePath)) {
+      fs.unlinkSync(tempActionsFilePath);
+      console.log('🧹 Cleaned up temp actions file');
+    }
+
+    let validationResult = null;
+    let notarizeResult = null;
+    let notarizeError = null;
+
+    try {
+      const { coupon, domain, productUrl, filename, customActions } = req.body;
+
+      if (!coupon || !domain || !filename) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required parameters: coupon, domain, filename'
+        });
+      }
+
+      if (customActions) {
+        const tempRequestFilePath = `output/temp/actions.json`;
+        if(customActions.baseUrl
+          && customActions.productUrl
+          && customActions.type
+          && customActions?.actions?.length
+          && customActions?.waitTime
+          && customActions?.codeValidation
+          && customActions?.clearCoupon
+          && customActions?.requestParams) {
+          await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid custom actions format'
+          });
+        }
+      }
+
+      // 🔍 КРОК 1: Валідація купона
+      console.log('🔍 Step 1/2: Validating coupon...');
+
+      try {
+        validationResult = await validateCoupon({
+          coupon,
+          domain,
+          productUrl,
+          filename,
+          customActions,
+        });
+        console.log('✅ Coupon validation completed', validationResult);
+      } catch (validationErr) {
+        // Якщо валідація впала - одразу повертаємо помилку
+        console.error('❌ Validation failed:', validationErr.message);
+        return res.status(400).json({
+          success: false,
+          error: validationErr.message,
+          step: 'validation',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Якщо купон невалідний - повертаємо результат без нотаризації
+      if (!validationResult?.success) {
+        console.log('❌ Coupon is not valid, skipping notarization');
+        return res.status(200).json({
+          success: false,
+          message: 'Coupon is not valid',
+          coupon: validationResult.coupon,
+          domain: validationResult.domain,
+          validation: {
+            valid: false,
+            duration: validationResult.duration,
+            logs: validationResult.logs
+          },
+          notarization: {
+            completed: false,
+            error: null,
+            result: null
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // 🔐 КРОК 2: Нотаризація (тільки якщо купон валідний)
+      console.log('\n🔐 Step 2/2: Notarizing...');
+
+      try {
+        notarizeResult = await notarize(domain);
+        console.log('✅ Notarization completed!');
+      } catch (notarizeErr) {
+        // ⚠️ Нотаризація впала, але валідація успішна!
+        console.error('⚠️ Notarization failed:', notarizeErr.message);
+        notarizeError = notarizeErr.message;
+      }
+
+      console.log('NOTARIZE RESULT: ', notarizeResult);
+
+      // ✅ Завжди повертаємо результат
+      console.log('\n═══════════════════════════════════════');
+      console.log(notarizeError || !notarizeResult?.success
+        ? '⚠️ VALIDATION OK, NOTARIZATION FAILED'
+        : '✅ ALL STEPS COMPLETED SUCCESSFULLY'
+      );
+      console.log('═══════════════════════════════════════\n');
+
+      return res.status(200).json({
+        success: !notarizeError, // false якщо нотаризація впала
+        message: notarizeError
+          ? 'Coupon validated but notarization failed'
+          : 'Coupon validated and notarized successfully',
+        coupon: validationResult.coupon,
+        domain: validationResult.domain,
+        validation: {
+          valid: true,
+          duration: validationResult.duration,
+          applyCouponRequest: validationResult.applyCouponRequest
+        },
+        notarization: {
+          completed: !notarizeError && notarizeResult?.success,
+          error: notarizeError || null,
+          result: notarizeResult || null
+        },
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (err) {
+      // Загальна помилка (не валідація і не нотаризація)
+      console.error('\n❌ Unexpected API Error:', err.message);
+
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+        validation: validationResult ? {
+          valid: validationResult.success,
+          duration: validationResult.duration
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+    }
+  })();
 
   try {
-    const { coupon, domain, productUrl, filename, customActions } = req.body;
-
-    if (!coupon || !domain || !filename) {
-      return res.status(400).json({
+    await Promise.race([mainLogic, timeoutPromise]);
+  } catch (err) {
+    if (err.message.includes('timed out')) {
+      return res.status(504).json({
         success: false,
-        error: 'Missing required parameters: coupon, domain, filename'
+        error: 'Request took too long (timeout)',
+        timestamp: new Date().toISOString()
       });
     }
 
-    if (customActions) {
-      const tempRequestFilePath = `output/temp/actions.json`;
-      if(customActions.baseUrl
-        && customActions.productUrl
-        && customActions.type
-        && customActions?.actions?.length
-        && customActions?.waitTime
-        && customActions?.codeValidation
-        && customActions?.clearCoupon
-        && customActions?.requestParams) {
-        await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
-      } else {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid custom actions format'
-        });
-      }
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+        timestamp: new Date().toISOString()
+      });
     }
-
-    console.log('\n🚀 API: Full Flow - Validation → Notarization');
-    console.log('═══════════════════════════════════════');
-    console.log('   Coupon:', coupon);
-    console.log('   Domain:', domain);
-    console.log('   Filename:', filename);
-    if (productUrl) console.log('   Product URL:', productUrl);
-    if (customActions) console.log('   Custom Actions: ✅');
-    console.log('═══════════════════════════════════════\n');
-
-    // 🔍 КРОК 1: Валідація купона
-    console.log('🔍 Step 1/2: Validating coupon...');
-    const validationResult = await validateCoupon({
-      coupon: coupon,
-      domain: domain,
-      productUrl: productUrl,
-      filename: filename,
-      customActions,
-    });
-    console.log('✅ Coupon validation successful');
-
-    // 🔐 КРОК 2: Нотаризація
-    console.log('\n🔐 Step 2/2: Notarizing...');
-
-    // Запам'ятати існуючі proof файли ДО нотаризації
-    const proofsBefore = fs.readdirSync(PROOFS_DIR)
-      .filter(f => f.endsWith('.json'));
-
-    const notarizeResult = await notarize(domain);
-    console.log('✅ Notarization successful');
-
-    // 📁 Знайти новий proof файл
-    console.log('\n📁 Locating proof file...');
-
-    const proofsAfter = fs.readdirSync(PROOFS_DIR)
-      .filter(f => f.endsWith('.json'));
-
-    const newProofs = proofsAfter.filter(f => !proofsBefore.includes(f));
-
-    let proofFile = null;
-    let proofPath = null;
-    let proofData = null;
-
-    if (newProofs.length > 0) {
-      // Знайдено новий файл
-      proofFile = newProofs[0];
-      proofPath = path.join(PROOFS_DIR, proofFile);
-      proofData = readProof(proofPath);
-      console.log('✅ New proof file found:', proofFile);
-    } else {
-      // Взяти останній модифікований
-      const latestProof = findLatestProof();
-      if (latestProof) {
-        proofFile = latestProof.name;
-        proofPath = latestProof.path;
-        proofData = readProof(proofPath);
-        console.log('✅ Using latest proof file:', proofFile);
-      }
-    }
-
-
-
-    console.log('\n═══════════════════════════════════════');
-    console.log('✅ ALL STEPS COMPLETED SUCCESSFULLY');
-    console.log('═══════════════════════════════════════\n');
-
-    // Відповідь
-    res.json({
-      success: true,
-      message: 'Coupon validated and notarized successfully',
-      coupon: coupon,
-      domain: domain,
-      validation: {
-        valid: true,
-        duration: validationResult.duration,
-        applyCouponRequest: validationResult.applyCouponRequest
-      },
-      notarization: {
-        completed: true,
-        proofFile: proofFile,
-        proofPath: proofPath,
-        hasProofData: !!proofData
-      },
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (err) {
-    console.error('\n❌ API Error:', err.message);
-    console.error('═══════════════════════════════════════\n');
-
-    const isCouponInvalid = err.message.includes('not valid');
-
-    res.status(isCouponInvalid ? 400 : 500).json({
-      success: false,
-      error: err.message,
-      couponValid: isCouponInvalid ? false : undefined,
-      timestamp: new Date().toISOString()
-    });
   }
 });
+
+
+// API для валідації і нотаризації
+// app.post('/api/validate-coupon', async (req, res) => {
+//   // Очистити temp файли
+//   const tempRequestFilePath = path.join(__dirname, '.', 'output/temp/request.json');
+//   const tempActionsFilePath = path.join(__dirname, '.', 'output/temp/actions.json');
+//   if (fs.existsSync(tempRequestFilePath)) {
+//     fs.unlinkSync(tempRequestFilePath);
+//     console.log('🧹 Cleaned up temp request file');
+//   }
+//   if (fs.existsSync(tempActionsFilePath)) {
+//     fs.unlinkSync(tempActionsFilePath);
+//     console.log('🧹 Cleaned up temp actions file');
+//   }
+//
+//
+//   try {
+//     const { coupon, domain, productUrl, filename, customActions } = req.body;
+//
+//     if (!coupon || !domain || !filename) {
+//       return res.status(400).json({
+//         success: false,
+//         error: 'Missing required parameters: coupon, domain, filename'
+//       });
+//     }
+//
+//     if (customActions) {
+//       const tempRequestFilePath = `output/temp/actions.json`;
+//       if(customActions.baseUrl
+//         && customActions.productUrl
+//         && customActions.type
+//         && customActions?.actions?.length
+//         && customActions?.waitTime
+//         && customActions?.codeValidation
+//         && customActions?.clearCoupon
+//         && customActions?.requestParams) {
+//         await fs.writeFileSync(tempRequestFilePath, JSON.stringify(customActions, null, 2));
+//       } else {
+//         return res.status(400).json({
+//           success: false,
+//           error: 'Invalid custom actions format'
+//         });
+//       }
+//     }
+//
+//     console.log('\n🚀 API: Full Flow - Validation → Notarization');
+//     console.log('═══════════════════════════════════════');
+//     console.log('   Coupon:', coupon);
+//     console.log('   Domain:', domain);
+//     console.log('   Filename:', filename);
+//     if (productUrl) console.log('   Product URL:', productUrl);
+//     if (customActions) console.log('   Custom Actions: ✅');
+//     console.log('═══════════════════════════════════════\n');
+//
+//     // 🔍 КРОК 1: Валідація купона
+//     console.log('🔍 Step 1/2: Validating coupon...');
+//     const validationResult = await validateCoupon({
+//       coupon: coupon,
+//       domain: domain,
+//       productUrl: productUrl,
+//       filename: filename,
+//       customActions,
+//     });
+//     console.log('✅ Coupon validation successful');
+//
+//     // 🔐 КРОК 2: Нотаризація
+//     console.log('\n🔐 Step 2/2: Notarizing...');
+//
+//     // Запам'ятати існуючі proof файли ДО нотаризації
+//     const proofsBefore = fs.readdirSync(PROOFS_DIR)
+//       .filter(f => f.endsWith('.json'));
+//
+//     const notarizeResult = await notarize(domain);
+//     console.log('✅ Notarization successful');
+//
+//     // 📁 Знайти новий proof файл
+//     console.log('\n📁 Locating proof file...');
+//
+//     const proofsAfter = fs.readdirSync(PROOFS_DIR)
+//       .filter(f => f.endsWith('.json'));
+//
+//     const newProofs = proofsAfter.filter(f => !proofsBefore.includes(f));
+//
+//     let proofFile = null;
+//     let proofPath = null;
+//     let proofData = null;
+//
+//     if (newProofs.length > 0) {
+//       // Знайдено новий файл
+//       proofFile = newProofs[0];
+//       proofPath = path.join(PROOFS_DIR, proofFile);
+//       proofData = readProof(proofPath);
+//       console.log('✅ New proof file found:', proofFile);
+//     } else {
+//       // Взяти останній модифікований
+//       const latestProof = findLatestProof();
+//       if (latestProof) {
+//         proofFile = latestProof.name;
+//         proofPath = latestProof.path;
+//         proofData = readProof(proofPath);
+//         console.log('✅ Using latest proof file:', proofFile);
+//       }
+//     }
+//
+//
+//
+//     console.log('\n═══════════════════════════════════════');
+//     console.log('✅ ALL STEPS COMPLETED SUCCESSFULLY');
+//     console.log('═══════════════════════════════════════\n');
+//
+//     // Відповідь
+//     res.json({
+//       success: true,
+//       message: 'Coupon validated and notarized successfully',
+//       coupon: coupon,
+//       domain: domain,
+//       validation: {
+//         valid: true,
+//         duration: validationResult.duration,
+//         applyCouponRequest: validationResult.applyCouponRequest
+//       },
+//       notarization: {
+//         completed: true,
+//         proofFile: proofFile,
+//         proofPath: proofPath,
+//         hasProofData: !!proofData
+//       },
+//       timestamp: new Date().toISOString()
+//     });
+//
+//   } catch (err) {
+//     console.error('\n❌ API Error:', err.message);
+//     console.error('═══════════════════════════════════════\n');
+//
+//     const isCouponInvalid = err.message.includes('not valid');
+//
+//     res.status(isCouponInvalid ? 400 : 500).json({
+//       success: false,
+//       error: err.message,
+//       couponValid: isCouponInvalid ? false : undefined,
+//       timestamp: new Date().toISOString()
+//     });
+//   }
+// });
 
 // API для списку файлів
 app.get('/api/proofs', (req, res) => {

@@ -27,7 +27,7 @@ COPY package*.json ./
 RUN npm ci
 
 # Встановити Playwright
-RUN npx playwright install chromium firefox --with-deps
+RUN npx playwright install chromium firefox webkit --with-deps
 
 # Копіювати код і білд
 COPY . .

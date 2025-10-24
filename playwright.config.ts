@@ -41,6 +41,7 @@ if (isCustomConfig || targetDomain && config.sites && config.sites[targetDomain]
   const siteConfig = isCustomConfig ? config : config?.sites[targetDomain];
   const { host, port } = extractHostPort(siteConfig?.requestParams?.applyCouponUrl);
   proxyTarget = `${host}:${port}`;
+
   wsProxyCommand = `wstcp --bind-addr ${bindAddress} ${proxyTarget}`;
 
   console.log('🌐 WebSocket Proxy will connect to:', proxyTarget);
